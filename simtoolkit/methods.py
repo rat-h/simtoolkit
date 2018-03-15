@@ -19,7 +19,9 @@ class methods:
 	To generate python object for given name read the parameter value or call
 	generate(parameter_name) or call generate() without parameters for building all parameters.
 	"""
-	is_lambda = lambda self, value    : isinstance(value, types.LambdaType) and value.__name__ == '<lambda>'
+	is_lambda         = lambda self, value    : isinstance(value, types.LambdaType) and value.__name__ == '<lambda>'
+	__check_pattern__ = lambda self, key, pat : key[ :len(pat)] == pat
+	__kcehc_pattern__ = lambda self, key, pat : key[-len(pat):] == pat
 	def __init__(self,
 		confile, target,  localcontext,
 		argvs=None,
@@ -35,27 +37,27 @@ class methods:
 		"""
 		creates the object of methods. __init__ needs 3  parameters and accepts lots of options
 		@param confile     - a name of configuration file, which methods parses to extract
-		                   - default parameter set (may a list of names or open files).
+		                     default parameter set (may be a list of names or open files).
 		@param target      - name of methods object which will be created by this constructor
 		@param localcontext- local namespace where all exec(s) should be run.
-		                   - can be alter by localcontext parameter in generate function
-		                   - if None, methods uses current context from globals()
+		                     can be alter by localcontext parameter in generate function
+		                     if None, methods uses current context from globals()
 		---
-		@opt   argvs       - command line arguments, which will be processed after defaults .
+		@opt   argvs       - command line arguments, which will be processed after defaults.
 		@opt   dbsymbol    - (a set of) symbol(s) to indicate that some parameters should be read
-						   - from data base 
+						     from data base 
 		@opt   dbsepcartor - a separator to segregate database name/url, record hash/time-stamp and
-		                   - parameter name(s) 
-		                   - EXAMPLES:
+		                     parameter name(s) 
+		                     EXAMPLES:
 						       url access, extracts record using time-stamp:
-		                          db=url:myneuron.org:(2016,03,02):/Populations/E:/Population/P:/Connections
+		                          db=mysql:myneuron.org:2016-03-02/*):/Populations/E:/Population/P:/Connections
 		                       local STKDB file access, extracts record using hash:
 		                          db=simulations.stkdb:2a077d01a8a1018c6902b20b8bcfe1e90082b952:/Populations/AN:/Populations/SBC:/Populations/GBC
 		@opt   cfsymbol    - (a set of) symbol(s) to indicate that some parameters should be read
-						   - from additional configuration file 
+						     from additional configuration file 
 		@opt   cfseparator - a separator to segregate configuration filename  and
-		                   - parameter name(s) 
-		                   - EXAMPLE:
+		                     parameter name(s) 
+		                     EXAMPLE:
 		                       reads all parameters from an additional configuration file
 		                          conf=additional.conf
 		                       reads some parameters from an additional configuration file
@@ -115,23 +117,39 @@ class methods:
 			pass
 		else:
 			self.logger.error("----------------------------------------------------")
-			self.logger.error("SimToolKit: METHODS ERROR(methods.__init__)")
-			self.logger.error("          : Confile should be a string or a file object or list/tuple of strings or file objects. {} is given".format(type(confile)))
+			self.logger.error(" METHODS ERROR in __init__)")
+			self.logger.error(" Confile should be a string or a file object or list/tuple of strings or file objects. {} is given".format(type(confile)))
 			self.logger.error("----------------------------------------------------")		
 			if self.pure : raise TypeError("Confile should be a string or a file object or list/tuple of strings or file objects. {} is given".format(type(confile)))
 		for cf in confile:
 			self.__confreader__(cf)
+		#---
+		if type(argvs) is str:
+			argvs = [ argvs ]
+		elif type(argvs) is tuple or type(argvs) is list:
+			if reduce(lambda x,y: x and type(y) is str, argvs, True):	pass
+			else:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __init__)")
+				self.logger.error(" Not all arguments {} are strings".format(argvs))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise TypeError("Not all arguments {} are strings".format(argvs))
+				return True
+		else:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" METHODS ERROR in __init__)")
+			self.logger.error(" Arguments should be a string or list/tuple of strings or file objects. {} is given".format(type(argvs)))
+			self.logger.error("----------------------------------------------------")		
+			if self.pure : raise TypeError("Arguments should be a string or list/tuple of strings or file objects. {} is given".format(type(argvs)))
+		#for arg in argvs:
+			
 		
-		
+	# Functions to read parameters from  default configuration, stkdb and so on	
 	def __confreader__(self, confile):
 		"""
 		reads configuration file(s) and creates text tree.
 		it resolves groups and prepare iterators for farther use
 		"""
-		def check(key,pat):
-			return key[ :len(pat)] == pat
-		def kcehc(key,pat):
-			return key[-len(pat):] == pat
 		def resolve_expression(expr, sep = self.vseparator):			
 			return [ x.strip(" \n\t\r") for x in expr.strip(" \n\t\r").split(sep,1) ]
 		def resolve_iterators(name, sep=self.isymbol):
@@ -147,18 +165,25 @@ class methods:
 					self.iterate[sep+arg+sep]=value
 				result += sep+parts[0]+sep
 			return result
-
-
+		
 		if not ( type(confile) is str or type(confile) is file ) :
 			self.logger.error("----------------------------------------------------")
-			self.logger.error("SimToolKit: METHODS ERROR(methods.__confreader__)")
-			self.logger.error("		     : Confile should be a string or a file object. {} is given".format(type(confile)))
+			self.logger.error(" METHODS ERROR in __confreader__)")
+			self.logger.error(" Confile should be a string or a file object. {} is given".format(type(confile)))
 			self.logger.error("----------------------------------------------------")		
 			if self.pure : raise ValueError("Confile should be a string or a file object. {} is given".format(type(confile)))
 		if type(confile) is str:
-			confile = open(confile)
-
-		
+			self.logger.debug( "reading configure file %s"%(confile))
+			try:
+				confile = open(confile)
+			except BaseException as e:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __confreader__)")
+				self.logger.error(" Cannot open configuration file {}: {}".format(confile,e))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise ValueError("Cannot read configuration file {}: {}".format(confile,e))
+				return
+			
 		message_on = False
 		groups = []
 		command, message, continue_on = "", "", False
@@ -168,11 +193,11 @@ class methods:
 			if len(l)             == 0               : continue
 			if l.lstrip(" \t")[0] == self.mseparator : continue
 			#Extracting the main message 
-			if check(l,self.mmopen):
+			if self.__check_pattern__(l,self.mmopen):
 				message_on        = True
 				self.mainmessage += l[len(self.mmopen):]+"\n"
 				continue
-			elif message_on and kcehc(l,self.mmend):
+			elif message_on and self.__kcehc_pattern__(l,self.mmend):
 				self.mainmessage += l[:-len(self.mmend)]+"\n"
 				message_on        = False
 				continue
@@ -184,21 +209,21 @@ class methods:
 			vm  = l.split(self.mseparator,1)
 			if len(vm) == 1:
 				vm = vm[0].strip(" \n\t\r"+self.mlvsymbol)
-				if kcehc(vm,self.groupopen):
+				if self.__kcehc_pattern__(vm,self.groupopen):
 					#resolve ierators in a group
 					gname = resolve_iterators(vm[:-len(self.groupopen)].strip(" \n\t\r"+self.hsymbol)) 
 					groups.append(gname)
 					continue
-				elif kcehc(vm,self.groupend):
+				elif self.__kcehc_pattern__(vm,self.groupend):
 					groups = groups[:-1]
 					continue
 				else: 
 					self.logger.error("----------------------------------------------------")
-					self.logger.error("SimToolKit: METHODS ERROR(methods.__confreader__)")
-					self.logger.error("          : Found line with no message separator {} at line {} of file".format(self.mseparator, nl+1, confile.name))
+					self.logger.error(" METHODS ERROR in __confreader__)")
+					self.logger.error(" Found line with no message separator {} at line {} of file".format(self.mseparator, nl+1, confile.name))
 					if self.pure : raise ValueError(" Found line with no message separator {} at line {} of file".format(self.mseparator, nl+1, confile.name))
 					self.logger.warning("----------------------------------------------------")
-			elif  kcehc(vm[0].strip(" \n\t\r"),self.mlvsymbol):
+			elif  self.__kcehc_pattern__(vm[0].strip(" \n\t\r"),self.mlvsymbol):
 				command += vm[0].strip(" \n\t\r")[:-len(self.mlvsymbol)]
 				message += vm[1].replace("\n"," ")
 				if not continue_on: continue_on = nl+1
@@ -206,11 +231,11 @@ class methods:
 			else:
 				command += vm[0]
 				message += vm[1]				
-				if kcehc(command.strip(" \n\t\r"),self.groupopen) or kcehc(command.strip(" \n\t\r"),self.groupend):
+				if self.__kcehc_pattern__(command.strip(" \n\t\r"),self.groupopen) or self.__kcehc_pattern__(command.strip(" \n\t\r"),self.groupend):
 					self.logger.warning("----------------------------------------------------")
-					self.logger.warning("SimToolKit: METHODS ERROR(methods.__confreader__)")
-					self.logger.warning("          : Found group beginning or end before a message at line {} of {}".format(nl+1, confile.name))
-					self.logger.warning("          : NOTE: it you are using dictionaries please convert them into a subtree(s) to avoid this message again.")
+					self.logger.warning(" METHODS ERROR in __confreader__)")
+					self.logger.warning(" Found group beginning or end before a message at line {} of {}".format(nl+1, confile.name))
+					self.logger.warning(" NOTE: it you are using dictionaries please convert them into a subtree(s) to avoid this message again.")
 					self.logger.warning("----------------------------------------------------")
 				parts = resolve_expression( resolve_iterators(command) )+[message]
 				parts = "/".join([""]+groups+[""])+parts[0].strip(" \n\t\r/"), parts[1].strip(" \n\t\r"),parts[2].strip(" \n\t\r")
@@ -218,6 +243,63 @@ class methods:
 				command, message, continue_on = "", "", False
 		confile.close()
 
+	def __read_conf__(self,conf,parameters=None):
+		try:
+			xconf = methods(conf,"xconf",locals())
+		except BaseException as e:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" METHODS ERROR in __read_conf__)")
+			self.logger.error(" Cannot read configuration file {}: {}".format(conf,e))
+			self.logger.error("----------------------------------------------------")		
+			if self.pure : raise ValueError("Cannot read configuration file {}: {}".format(conf,e))
+			return True
+		if xconf.__resolve_iterators__():
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" METHODS ERROR in __read_conf__)")
+			self.logger.error(" Cannot resolve iterators in configuration file {}: {}".format(conf,e))
+			self.logger.error("----------------------------------------------------")		
+			if self.pure : raise ValueError("Cannot resolve iterators in configuration file {}: {}".format(conf,e))
+			return True
+		if parameters is None:
+			for n in xconf.methods_txt:
+				self.methods_txt[n] = xconf.methods_txt[n]
+			return False
+		else:
+			if type(parameters) is str:
+				parameters = [ parameters ]
+			elif type(parameters) is list or type(parameters) is tuple:
+				if reduce(lambda x,y: x and type(y) is str, parameters, True):	pass
+				else:
+					self.logger.error("----------------------------------------------------")
+					self.logger.error(" METHODS ERROR in __read_conf__)")
+					self.logger.error(" Not all parameters {} are strings".format(parameters))
+					self.logger.error("----------------------------------------------------")		
+					if self.pure : raise TypeError("Not all parameters {} are strings".format(parameters))
+					return True
+			else:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __read_conf__)")
+				self.logger.error(" Incorrect type of imported parameters. It should be string or list/tuple of string. {} is given".format(type(parameters)))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise TypeError("Incorrect type of exported parameters. It should be string or list/tuple of string. {} is given".format(type(parameters)))
+				return True
+			for param in parameters:
+				if not param in xconf.methods_txt:
+					self.logger.error("----------------------------------------------------")
+					self.logger.error(" METHODS ERROR in __read_conf__)")
+					self.logger.error(" Cannot import parameter {} from the configuration file {}: there is no such parameter".format(param,conf) )
+					self.logger.error("----------------------------------------------------")		
+					if self.pure : raise TypeError("Cannot import parameter {} from the configuration file {}: there is no such parameter".format(param,conf) )
+					#return True # << Not sure what is the best option here
+					continue
+				self.methods_txt[param] = xconf.methods_txt[param]
+			return False
+					
+				
+				
+		
+		
+	
 	def gethash(self, name=''):
 		if not name in self.methods: return None
 		if isinstance(self.methods[name], tree):
@@ -240,23 +322,33 @@ class methods:
 			return self.hashspace[name]
 		return None
 
-#### FROM SIM TOOLS METHODS >>>>>
+	# Functions for tree like behavior. 
+	# They mostly redirect calls to self.methods tree
 	def __setitem__(self, key, value): self.methods.__setitem__(key, value)
 	def __getitem__(self, key)       : 
+		if not self.methods.__contains__(key) and self.methods_txt.__contains__(key):
+			if self.generate(var=key):
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __getitem__)")
+				self.logger.error(" Cannot resolve generate key {}".format(key))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise KeyError("Cannot resolve generate key {}".format(key))
+				return None
 		if key[0] == "#":
 			return self.gethash(key[1:])
 		return self.methods.__getitem__(key)
-	def __contains__(self,key)       : return self.methods.__contains__(key)
+	def __contains__(self,key)       : 
+		return self.methods.__contains__(key) or self.methods_txt.__contains__(key)
 	def __delitem__(self, key)       : self.methods.__delitem__(key)
 	def __iter__(self):
 		for name in self.methods.__iter__(): yield name
 	def check(self, key)	         : return self.methods.check(key)
 	def dict(self):
 		for name in self.methods.dict():yield name
-#### <<<<<<<<<<<<<<<<<<<<<<<<<<<<		
 	def __namefilter__(self,name,flt):
 		return reduce(lambda x,y: x or name.startswith(y), flt, False)
 
+	# Functions which parse and convert text values to objects
 	def __resolve_iterators__(self):
 		"""
 		resolves all iterators
@@ -265,8 +357,8 @@ class methods:
 			value = self.resolve_name(self.localcontext[self.target].methods, self.target, self.iterate[itr], prohibit=[])
 			if value is None:
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.__resolve_iterators__)")
-				self.logger.error("          : Cannot resolve iterator {}".format(itr))
+				self.logger.error(" METHODS ERROR in __resolve_iterators__)")
+				self.logger.error(" Cannot resolve iterator {}".format(itr))
 				self.logger.error("----------------------------------------------------")		
 				if self.pure : raise ValueError("Cannot resolve iterator {}".format(itr))
 				return True
@@ -274,8 +366,8 @@ class methods:
 				exec "{}.itrvalue={}".format(self.target,value) in self.localcontext
 			except BaseException as e:
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.__resolve_iterators__)")
-				self.logger.error("		     : Cannot execute operation {}.itrvalue={}: {}".format(self.target,value,e))
+				self.logger.error(" METHODS ERROR in __resolve_iterators__)")
+				self.logger.error(" Cannot execute operation {}.itrvalue={}: {}".format(self.target,value,e))
 				self.logger.error("----------------------------------------------------")		
 				if self.pure : raise ValueError("Cannot execute operation {}.itrvalue={}: {}".format(self.target,value,e))
 				return True
@@ -310,18 +402,18 @@ class methods:
 			if not var in tree and var in self.methods_txt:
 				if self.__namefilter__(var, prohibit):
 					self.logger.error("----------------------------------------------------")
-					self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-					self.logger.error("		     : Parameter \'{}\' wasn't resolved and it is prohibited.".format(var))
+					self.logger.error(" METHODS ERROR in generate)")
+					self.logger.error(" Parameter \'{}\' wasn't resolved and it is prohibited.".format(var))
 					self.logger.error("----------------------------------------------------")		
-					if self.pure                 : raise TypeError("Parameter \'{}\' wasn't resolved and it is prohibited.".format(var))
+					if self.pure: raise TypeError("Parameter \'{}\' wasn't resolved and it is prohibited.".format(var))
 					return None
 				self.stackcnt += 1
 				if self.stackcnt > 100:
 					self.logger.error("----------------------------------------------------")
-					self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-					self.logger.error("		     : Exceed number of stack operation (101).")
+					self.logger.error(" METHODS ERROR in generate)")
+					self.logger.error(" Exceed number of stack operation (101).")
 					self.logger.error("----------------------------------------------------")		
-					if self.pure                 : raise ValueError("Exceed number of stack operation (101).")
+					if self.pure: raise ValueError("Exceed number of stack operation (101).")
 					return None
 				self.generate(var,target=self.target,localcontext=self.localcontext, prohibit=prohibit) 
 			lmdcheck = self.is_lambda(tree[var])
@@ -355,7 +447,7 @@ class methods:
 
 	def generate(self, var=None, target=None, localcontext = None, prohibit=None, text=False):
 		"""
-		generates records in the methods tree
+		generates python objects in self.methods tree based on records in self.methods_txt tree
 		@opt   var         - variable or list of variables which should be generated
 		@opt   target      - string of variable name which will be generate (need for lambda(s)), 
 		@opt   localcontext- local name space, usually = globals() or locals()
@@ -371,10 +463,10 @@ class methods:
 			
 		if not self.target in self.localcontext:			
 			self.logger.error("----------------------------------------------------")
-			self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-			self.logger.error("		     : Target object \'{}\' is not found in context".format(self.target))
+			self.logger.error(" METHODS ERROR in generate)")
+			self.logger.error(" Target object \'{}\' is not found in context".format(self.target))
 			self.logger.error("----------------------------------------------------")		
-			if self.pure                 : raise ValueError("Target object \'{}\' is not found in context".format(self.target))
+			if self.pure: raise ValueError("Target object \'{}\' is not found in context".format(self.target))
 			return True
 
 
@@ -384,20 +476,20 @@ class methods:
 				if reduce(lambda x,y: x and type(y) is str, prohibit, True) : pass  
 				else:
 					self.logger.error("----------------------------------------------------")
-					self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-					self.logger.error("		     : One of entrances of the Prohibit option has wrong type.")
+					self.logger.error(" METHODS ERROR in generate)")
+					self.logger.error(" One of entrances of the Prohibit option has wrong type.")
 					self.logger.error("----------------------------------------------------")		
-					if self.pure                 : raise TypeError("One of entrances of the Prohibit option has wrong type.")
+					if self.pure: raise TypeError("One of entrances of the Prohibit option has wrong type.")
 					return True
 
 			else:
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-				self.logger.error("		     : Prohibit option has wrong type \'{}\'.".format(type(prohibit)))
+				self.logger.error(" METHODS ERROR in generate)")
+				self.logger.error(" Prohibit option has wrong type \'{}\'.".format(type(prohibit)))
 				self.logger.error("----------------------------------------------------")		
 				if self.pure                 : raise TypeError("Prohibit option has wrong type \'{}\'.".format(type(prohibit)))
 				return True
-		else :                                                      prohibit = []
+		else : prohibit = []
 				
 		
 		if   var is None:                             var = self.methods_txt
@@ -405,8 +497,8 @@ class methods:
 		elif type(var) is str                       : var = [ var ]
 		else:
 			self.logger.error("----------------------------------------------------")
-			self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-			self.logger.error("		     : Variable option has wrong type \'{}\'; it should be a string or a list of strings or None.".format(type(var)))
+			self.logger.error(" METHODS ERROR in generate)")
+			self.logger.error(" Variable option has wrong type \'{}\'; it should be a string or a list of strings or None.".format(type(var)))
 			self.logger.error("----------------------------------------------------")		
 			if self.pure                 : raise TypeError("Variable option has incorrect type \'{}\'.".format(type(prohibit)))
 			return True
@@ -416,32 +508,32 @@ class methods:
 			if self.__resolve_iterators__():
 				self.iterate_res = False
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-				self.logger.error("		     : Cannot resolve iterators")
+				self.logger.error(" METHODS ERROR in generate)")
+				self.logger.error(" Cannot resolve iterators")
 				self.logger.error("----------------------------------------------------")		
-				if self.pure                 : raise ValueError("Cannot resolve iterators")
+				if self.pure              : raise ValueError("Cannot resolve iterators")
 				return True
 			
 			
 		for name in var:
 			if not type(name) is str:
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-				self.logger.error("		     : Variable name is not string: type \'{}\' is given.".format(type(name)))
+				self.logger.error(" METHODS ERROR in generate)")
+				self.logger.error(" Variable name is not string: type \'{}\' is given.".format(type(name)))
 				self.logger.error("----------------------------------------------------")		
 				if self.pure                 : raise TypeError("Variable name is not string: type \'{}\' is given.".format(type(name)))
 				return True
 			if self.__namefilter__(name, prohibit):
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-				self.logger.error("		     : Resolving a name \'{}\' is prohibited.".format(name))
+				self.logger.error(" METHODS ERROR in generate)")
+				self.logger.error(" Resolving a name \'{}\' is prohibited.".format(name))
 				self.logger.error("----------------------------------------------------")		
 				if self.pure                 : raise TypeError("Resolving a name \'{}\' is prohibited.".format(name))
 				return True
 			if not name in self.methods_txt:
 				self.logger.error("----------------------------------------------------")
-				self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-				self.logger.error("		     : Cannot find parameter name \'{}\' is the text tree.".format(name))
+				self.logger.error(" METHODS ERROR in generate)")
+				self.logger.error(" Cannot find parameter name \'{}\' is the text tree.".format(name))
 				self.logger.error("----------------------------------------------------")		
 				if self.pure                 : raise TypeError("Cannot find parameter name \'{}\' is the text tree.".format(name))
 				return True
@@ -462,8 +554,8 @@ class methods:
 						exec "{}.methods[\'{}\']=\"{}\"".format(self.target,name,re.sub(r"\\", "\\\\", re.sub(r"\"","\\\"", re.sub("\'","\\\'", value) ) )) in self.localcontext
 					except BaseException as e:
 						self.logger.error("----------------------------------------------------")
-						self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-						self.logger.error("		     : Cannot execute operation {}[\'{}\']=\"{}\": {}".format(
+						self.logger.error(" METHODS ERROR in generate)")
+						self.logger.error(" Cannot execute operation {}[\'{}\']=\"{}\": {}".format(
 							target, name,
 							re.sub(r"\\", "\\\\", re.sub(r"\"","\\\"", re.sub("\'","\\\'", value))),e))
 						self.logger.error("----------------------------------------------------")		
@@ -475,8 +567,8 @@ class methods:
 						exec "{}.methods[\'{}\']={}".format(self.target,name,value) in self.localcontext
 					except BaseException as e:
 						self.logger.error("----------------------------------------------------")
-						self.logger.error("SimToolKit: METHODS ERROR(methods.generate)")
-						self.logger.error("		     : Cannot execute operation {}[\'{}\']={}: {}".format(self.target,name,value,e))
+						self.logger.error(" METHODS ERROR in generate)")
+						self.logger.error(" Cannot execute operation {}[\'{}\']={}: {}".format(self.target,name,value,e))
 						self.logger.error("----------------------------------------------------")		
 						if self.pure             : raise ValueError("Cannot execute operation {}[\'{}\']={}: {}".format(self.target,name,value,e))
 						return True
@@ -485,15 +577,14 @@ class methods:
 					#self.hashspace[name] = self.gethash(name)
 					## Update hash everytime then parameter change 
 					## NOTE: it doesn't help with data set up outside methods
-					#>> get it back!!!!!
 					self.hashspace[name] = self.gethash(name)#hashlib.sha1(str(self.methods[name])).hexdigest()
 					for dep in self.dependences:
 						self.hashspace[name] += ":"+self.gethash(dep)
-					#<<
 				self.dependences = []
 				self.logger.debug( " > % 76s : OK"%(name))
 		return False
 
+	
 
 
 
@@ -502,7 +593,7 @@ if __name__ == "__main__":
 		print "USEAGE: python -m ../simtoolkit/methods model-fileformats/general-syntax.stkconf"
 		exit(1)
 	#CHECK LOGGER
-	logging.basicConfig(format='%(asctime)s: %(levelname)-8s:%(message)s', level=logging.DEBUG)
+	logging.basicConfig(format='%(asctime)s: %(levelname)-8s:%(message)s', level=logging.INFO)
 	m = methods(sys.argv[1:],"m",globals())
 	print
 	print m.mainmessage.replace("\n", "\nMESSAGE:   ")
@@ -575,14 +666,13 @@ if __name__ == "__main__":
 		else:
 			print p,m.methods[k],type(m.methods[k])
 	
-	print "#====================================#"
-	print "#         RESOLVING STIMULI          #"
-	m.generate("/STIMULI")
-	print "====================================== THE STIMULI TREE : ====================="
-	#for p,k in m.methods.printnames():
-		#if k is None:
-			#print p
-		#else:
-			#print p,m.methods[k],type(m.methods[k])
+	
+	
+	##>> Remove a /STIMULI to show resolving in line
+	del m["/STIMULI"]
+	print "================================================================================="
+	print "#                                       RESOLVED INLINE                         #"
+	print "#                                      THE STIMULI TREE :                       #"	
 	for p in m["/STIMULI"]:
 		print "% 55s :"%("/STIMULI"+p),m["/STIMULI"+p]
+	print "================================================================================="
