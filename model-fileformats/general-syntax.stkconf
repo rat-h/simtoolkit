@@ -213,17 +213,17 @@ Here is an example:
 
 
 ; A life example
-; A set of Click stimulus with different ITD
-/STIMULI/Click` c= linspace(-1.1,1.1,6) `/{
-	/StimGen/type      = 'click'                                                                   ; type of for Click`c` simulation
-	/StimGen/interaural-time-difference       = `c`                                                ; ITD for for Click`c` simulation
-	/StimGen/interaural-level-difference      = 0.                                                 ; IPD for Click`c`
+; A set of Click stimulus with different ITD and ILD
+/STIMULI/Click` c= linspace(-1.1,1.1,6) `-` d=linspace(0,1,11)`/{
+	/StimGen/type      = 'click'                                                                   ; type of for Click`c`-`d` simulation
+	/StimGen/interaural-time-difference       = `c`                                                ; ITD for for Click`c`-`d` simulation
+	/StimGen/interaural-level-difference      = `d`                                                ; IPD for Click`c`-`d`
 ;	/StimGen/left-an   = @/an-configuration/left/an@                                               ; Left AN configuration
 ;	/StimGen/right-an  = @/an-configuration/right/an@                                              ; Right AN configuration
-	/StimGen/file      = 'STIMULI/Click`c`'                                                        ; filename for Click`c`
+	/StimGen/file      = 'STIMULI/Click`c`-`d`'                                                    ; filename for Click`c`-`d`
 ;	/StimGen/hash      = #/an-configuration#                                                       ; Hashsum for AN configuration
 
-	/Outputfile        = 'RESULTS/Click`c`-out'                                                    ; A name of output file for Click`c`"
-;	/StimFunction      = angen                                                                     ; A function which will be called to generate stimulus for Click`c` simulation and returns duration
-;	/Simulation/stop   = @/STIMULI/Click`c`/StimFunction@(**@/STIMULI/Click`c`/StimGen@)*1000.     ; Stop time for Click`c`, got from Stimulus generator (in ms)
+	/Outputfile        = 'RESULTS/Click`c`-`d`-out'                                                ; A name of output file for Click`c`-`d`
+;	/StimFunction      = angen                                                                     ; A function which will be called to generate stimulus for Click`c`-`d` simulation and returns duration
+;	/Simulation/stop   = @/STIMULI/Click`c`/StimFunction@(**@/STIMULI/Click`c`/StimGen@)*1000.     ; Stop time for Click `c`-`d`, got from Stimulus generator (in ms)
 }
