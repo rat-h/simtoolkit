@@ -1,7 +1,10 @@
 #! /usr/bin/env python
 
-import sys, os, optparse, platform, time, re, commands
+import sys, os, optparse, platform, time, re, commands, logging
 from simtoolkit import db, tree
+from datetime import datetime
+from random import randint
+import sqlite3
 
 option_parser = optparse.OptionParser(usage="%prog database command [command parameter(s)]\n\nDatabase:\n  File or URL\n\nCommands:\n"+\
 "  ls           - list all records or parameters with filter name if record is given\n"+\
@@ -16,15 +19,19 @@ option_parser = optparse.OptionParser(usage="%prog database command [command par
 "                  ls  7945* /Connections/*/gmax-*                    - prints out /Connections/*/gmax-* parameters in recordings starts with 7945\n"+\
 "                  ls  -n                                             - shows list of names\n"+\
 "  ------------------------------\n"+\
+"  create HASH MESSAGE \n"+\
+"               - creates new empty set of parameters with the HASHSUM and message\n"+\
+"                 EXAMPLE:\n"+\
+"                  create bd5f80e8be44c0965bab82698b24a6b6e4283816 \'blach-blach-blach\' \n"+\
 "  set KEY KEY VALUE \n"+\
 "               - sets in simulation(s) selected by the first key, parameter(s) selected by the second key into value\n"+\
 "  get KEY [KEY]- get a value of parameter in parameter defined by second key in record defined by the first key \n"+\
-"  rm  KEY [KEY]- remove record or parameters from record\n"+\
+"  rm  KEY [KEY]- remove record or parameter(s) from record\n"+\
 "                 EXAMPLE:\n"+\
 "                  rm 79455f9cc5cfda64bf77f59bb60113a4492ab3f8        - remove hole record 79455f9cc5cfda64bf.....\n"+\
 "                  rm 79455*                                          - remove all records start with 79455\n"+\
-"                  rm 79455*  /Connections/EE/                        - remove all /Connections/EE/ parameters records start with 79455\n"+\
-"                  rm 79455*  /Connections/*/gmax-*                   - remove all /Connections/*/gmax-* parameters records start with 79455\n"+\
+"                  rm 79455*  /Connections/EE/                        - remove all /Connections/EE/ parameters in records start with 79455\n"+\
+"                  rm 79455*  /Connections/*/gmax-*                   - remove all /Connections/*/gmax-* parameters in records start with 79455\n"+\
 "  ------------------------------\n"+\
 "  tag  COMMAND - operations with tag\n"+\
 "       ls               - shows all tags\n"+\
@@ -64,26 +71,28 @@ if len(args) < 2:
 	#sys.stderr.write("----------------------------------------------------\n")		
 	#exit(1)
 
+logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=logging.DEBUG)
+
 def printhead(h,t,m,g=None,idx=None):
 	if not idx is None:
-		print "INDEX      :",idx
-	print "HASH       :",h
-	print "TIME STAMP :",t.replace(" ","/")
-	print "MESSAGE    :",m.strip(" \n\t\a").replace("\n","\n               ")		
+		print "INDEX   :",idx
+	print "HASH    :",h
+	print "TIME    :",t.replace(" ","/")
+	print "MESSAGE :",m.strip(" \n\t\a").replace("\n","\n               ")		
 	if not g is None:
 		print "TAG        :",g
 def printtree(h,t,m,Atree,g=None,idx=None):
 	print "\n================================================================="
 	printhead(h,t,m,g=g,idx=idx)
-	print "  /        : TREE"
+	print "TREE    :/"
 	for p,k in Atree.printnames():
 		if k is None:
-			print " ",p
+			print "        ",p
 		else:
 			if len(Atree[k]) > 100 and not options.printfull:
-				print " ",p,Atree[k][:35]," ... ",Atree[k][-35:]
+				print "        ",p,Atree[k][:35]," ... ",Atree[k][-35:]
 			else:
-				print " ",p,"{}".format(Atree[k]).replace("\n", " ")
+				print "        ",p,"{}".format(Atree[k]).replace("\n", " ")
 	print
 def getpytype(v):
 	try:
@@ -129,6 +138,18 @@ if CMD == "ls":
 			if ch !="" and ct != "":
 				if options.tree:
 					printtree(h,t,m,Atree)
+elif CMD == "create":
+	if len(args) <  4:
+		sys.stderr.write("\n-----------------------\n"+\
+		   "Needs more parameters:\n"+\
+		   "use {} -h for more help\n\n".format(sys.argv[0]))
+		exit(1)
+	elif len(args) <  5:
+		now = datetime.now()
+		timestamp = "%d-%d-%d %d:%d:%d.%d"%(now.year, now.month, now.day, now.hour, now.minute, now.second, randint(0,999))
+	else :
+		timestamp = args[4]
+	stkdb.db.mkrec(timestamp,args[2],args[3])
 elif CMD == "set":
 	if len(args) <  5:
 		sys.stderr.write("\n-----------------------\n"+\
@@ -161,8 +182,10 @@ elif CMD == "get":
 		Atree = stkdb[i]
 	else:
 		Atree = stkdb[i ,getpytype(args[3])]
-	
 	printtree(hs,ts,ms,Atree,idx=i)
+elif CMD == "rm":
+	print "Doesn't work yet -.-"
+	exit(1)
 elif CMD == "tag":
 	if len(args) < 3 :
 		sys.stderr.write("\n-----------------------\n"+\
