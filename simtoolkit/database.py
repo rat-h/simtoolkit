@@ -105,6 +105,9 @@ class db:
 		self.__setitem__  = self.db.__setitem__
 		self.__getitem__  = self.db.__getitem__
 		self.__delitem__  = self.db.__delitem__
+		#---message  editing---
+		self.setmessage   = self.db.setmessage
+		self.getmessage   = self.db.getmessage
 		#---   Itergators   ---
 		self.__iter__     = self.db.__iter__
 		self.pool         = self.db.pool
@@ -419,7 +422,6 @@ class sqlite_v_0_1:
 				
 		self.db.commit()
 		return recid
-#-------- NEED TO THINK ABOUT IT -----------------#
 	def __setitem__(self, key, value):
 		if self.mode == "ro":
 			self.logger.error("----------------------------------------------------")
@@ -509,8 +511,6 @@ class sqlite_v_0_1:
 				self.logger.error("----------------------------------------------------")		
 				raise RuntimeError("Packvalue returns error type or length for key {}: {} {}".format(key,type(value),len(value)) )
 			self[ key ] = value
-	def __delitem__(self,key): pass #!!!!!
-#-------- NEED TO THINK ABOUT IT -----------------#
 	def __getitem__(self, key):
 		if type(key) is int:
 			SQL = "SELECT name,type, value FROM stkview WHERE id=:key;"
@@ -566,6 +566,41 @@ class sqlite_v_0_1:
 			self.logger.error(" Cannot fetch items for key: {} : {}".format(key, e))
 			self.logger.error("----------------------------------------------------")		
 			raise RuntimeError("Cannot fetch items for key: {} : {}".format(key, e))
+#-------- NEED TO THINK ABOUT IT -----------------#
+	def __delitem__(self,key): pass #!!!!!
+#-------- NEED TO THINK ABOUT IT -----------------#
+
+	def getmessage(self, key):
+		if type(key) is int:
+			return [ (i,h,m) for i,h,m in self.db.execute("SELECT id,hash,message FROM stkrecords WHERE id = :key ;",{'key':key}) ]
+		elif type(key) is str or type(key) is unicode:
+			return [ (i,h,m) for i,h,m in self.db.execute("SELECT id,hash,message FROM stkrecords WHERE hash GLOB ? OR timestamp GLOB ?;",(key,key)) ]
+		else:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in getmessage")
+			self.logger.error(" Incorrect key type. It should be string or int. {} is given".format(type(key)))
+			self.logger.error("----------------------------------------------------")		
+			raise TypeError("Incorrect key type. It should be string or int. {} is given".format(type(key)))
+	def setmessage(self, key, message):
+		if type(key) is int:
+			self.db.execute("REPLACE INTO stkrecords (id,timestamp,hash,message)"+\
+			 "VALUES (?,(SELECT timestamp FROM stkrecords WHERE id=?),(SELECT hash FROM stkrecords WHERE id=?),?);",(key,key,key,message)).fetchone()
+			self.db.commit()
+		elif type(key) is str or type(key) is unicode:
+			self.db.execute("REPLACE INTO stkrecords (id,timestamp,hash,message)"+\
+			 " VALUES ((SELECT id        FROM stkrecords WHERE hash = ? OR name = ?),"+\
+			          "(SELECT timestamp FROM stkrecords WHERE hash = ? OR name = ?),"+\
+			          "(SELECT hash      FROM stkrecords WHERE hash = ? OR name = ?),?);",(key,key,key,key,key,key,message)).fetchall()
+			self.db.commit()
+		else:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in setmessage")
+			self.logger.error(" Incorrect key type. It should be string or int. {} is given".format(type(key)))
+			self.logger.error("----------------------------------------------------")		
+			raise TypeError("Incorrect key type. It should be string or int. {} is given".format(type(key)))
+			
+		
+
 	def __iter__(self):
 		for rechash,timestemp,message in self.db.execute("SELECT hash,timestamp,message FROM stkrecords;"):
 			yield rechash,timestemp,message

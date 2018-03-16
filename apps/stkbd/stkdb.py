@@ -1,6 +1,9 @@
 #! /usr/bin/env python
 
 import sys, os, optparse, platform, time, re, commands, logging
+
+logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=logging.DEBUG)
+
 from simtoolkit import db, tree
 from datetime import datetime
 from random import randint
@@ -33,6 +36,10 @@ option_parser = optparse.OptionParser(usage="%prog database command [command par
 "                  rm 79455*  /Connections/EE/                        - remove all /Connections/EE/ parameters in records start with 79455\n"+\
 "                  rm 79455*  /Connections/*/gmax-*                   - remove all /Connections/*/gmax-* parameters in records start with 79455\n"+\
 "  ------------------------------\n"+\
+"  message KEY [new message] \n"+\
+"               - edit message in record marked by KEY\n"+\
+"                 if new message isn't provided, reads /STKDB/editor or /GENERAL/editor in configuration file\n"+\
+"  ------------------------------\n"+\
 "  tag  COMMAND - operations with tag\n"+\
 "       ls               - shows all tags\n"+\
 "       ls TAG [-t][-l]  - shows parameters in simulation with TAG\n"+\
@@ -46,7 +53,7 @@ option_parser = optparse.OptionParser(usage="%prog database command [command par
 "       rm TAG           - remove tag\n"+\
 "  ------------------------------\n"+\
 "  info        - print out information about data base\n"+\
-"  db rec|names|values [fliter [column]]\n"+\
+"  db recs|names|values [fliter [column]]\n"+\
 "              - debug information. see simtoolkit.database for more information\n"+\
 "\n===================================")
 option_parser.add_option("-n", "--names",            action="store_true",    dest="names",      default=False,\
@@ -71,7 +78,7 @@ if len(args) < 2:
 	#sys.stderr.write("----------------------------------------------------\n")		
 	#exit(1)
 
-logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=logging.DEBUG)
+
 
 def printhead(h,t,m,g=None,idx=None):
 	if not idx is None:
@@ -186,6 +193,46 @@ elif CMD == "get":
 elif CMD == "rm":
 	print "Doesn't work yet -.-"
 	exit(1)
+elif CMD == "message":
+	if len(args) < 3 :
+		sys.stderr.write("\n-----------------------\n"+\
+		   "Needs more parameters:\n"+\
+		   "use {} -h for more help\n\n".format(sys.argv[0]))
+		exit(1)
+	key = getpytype(args[2])
+	if len(args) > 3 :
+		message = args[3]
+	else:
+		from simtoolkit import __config__
+		if   "/STKDB/editor" in __config__.stk_config:
+			editor = __config__.stk_config["/STKDB/editor"]
+		elif "/GENERAL/editor" in __config__.stk_config:
+			editor = __config__.stk_config["/GENERAL/editor"]
+		else:
+			sys.stderr.write("\n-----------------------\n"+\
+			   "Cannot find editor. Please set it:\n"+\
+			   "stk-config STKDB/editor=vi \n")
+			exit(1)
+			
+		for i,h,m in stkdb.getmessage(key):
+			mfile = h+".msg"
+			with open(mfile,"w") as fd: fd.write(m)
+			pre_nstp = os.stat(mfile).st_mtime
+			os.system(editor+" "+mfile)
+			pos_nstp = os.stat(mfile).st_mtime
+			if pre_nstp == pos_nstp:
+				sys.stderr.write("\n-----------------------\n"+\
+				"message {} wasn't changed\n".format(h))
+				os.remove(mfile)
+				continue
+			fsize = os.path.getsize(mfile)
+			with open(mfile) as fd:
+				message = fd.read(fsize)
+			os.remove(mfile)
+			stkdb.setmessage(i,message)
+
+			
+	
 elif CMD == "tag":
 	if len(args) < 3 :
 		sys.stderr.write("\n-----------------------\n"+\
@@ -240,12 +287,18 @@ elif CMD == "db":
 	elif CMD == "names":
 		for i,n in stkdb.names(flt=flt):
 			print i,n
-	if   CMD == "values":
+	elif CMD == "values":
 		for i,r,n,v in stkdb.values(flt=flt,column=column):
 			if len(v) > 100  and not options.printfull:
 				print i,r,n,v[:35]," ... ",v[-35:]
 			else:
 				print i,r,n,"{}".format(v).replace("\n"," ")
+	else:
+		sys.stderr.write("\n-----------------------\n"+\
+		   "unknown debugger command: {} \n".format(CMD)+\
+		   "use {} -h for more help\n\n".format(sys.argv[0]))
+		exit(1)
+		
 elif CMD == "info":
 	info = stkdb.info()
 	print "\n==================================== "
