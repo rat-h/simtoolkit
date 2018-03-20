@@ -1,5 +1,6 @@
 ##STKDB
-Simulation Tool Kit Data Base (STKDB) holds parameters and some results of simulations in a standard sqlight3 data base.
+Simulation Tool Kit Data Base (STKDB) holds parameters and some results of simulations in a standard sqlight3 file or in an external database.
+The main purpose of this database is an accumulation of parameter sets, some lightweight simulation results (such as some final numbers, mean firing rate for example), and possibly some multimedia content along with message related to each simulation for many simulations. One can imagine stkdb as git repository for simulations with additional features.
 
 stkdb contains 5 tables: records, names, values, tags, mms
 
@@ -30,5 +31,6 @@ stkdb contains 5 tables: records, names, values, tags, mms
 1. id       INTEGER PRIMARY KEY AUTOINCREMENT - multimedia ID 
 2. record   INTEGER                           - attached to record ID
 3. format   TEXT                              - multimedia format 
-3. data     BLOB                              - data
+4. name     TEXT                              - contant name
+5. data     BLOB                              - contant data
 
