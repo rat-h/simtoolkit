@@ -1,6 +1,7 @@
 import os, sys, types, logging, re, hashlib
 from collections import OrderedDict
-from simtoolkit.tree import tree
+from simtoolkit.tree     import tree
+from simtoolkit.database import db
 from numpy import *
 
 
@@ -296,9 +297,67 @@ class methods:
 			return False
 					
 				
-				
-		
-		
+	def __read_db__(self,dburl,record,parameters=None):
+		try:
+			d = db(dburl,mode="ro")
+		except BaseException as e:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" METHODS ERROR in __read_db__)")
+			self.logger.error(" Cannot open data base {}: {}".format(dburl,e))
+			self.logger.error("----------------------------------------------------")		
+			if self.pure : raise ValueError("Cannot open data base {}: {}".format(dburl,e))
+			return True
+		if parameters is None:
+			try:
+				xtree = d[record]
+			except BaseException as e:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __read_db__)")
+				self.logger.error(" Cannot pool record {} from  data base {}: {}".format(record, dburl,e))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise ValueError("Cannot pool record {} from  data base {}: {}".format(record, dburl,e))
+				return True
+			for n in xtree:
+				if type(xtree[n]) is str or type(xtree[n]) is  unicode:
+					self.methods_txt[n] = xtree[n]
+				else:
+					self.methods[n] = xtree[n]
+			return False
+		else:
+			if type(parameters) is str:
+				parameters = [ parameters ]
+			elif type(parameters) is list or type(parameters) is tuple:
+				if reduce(lambda x,y: x and type(y) is str, parameters, True):	pass
+				else:
+					self.logger.error("----------------------------------------------------")
+					self.logger.error(" METHODS ERROR in __read_db__)")
+					self.logger.error(" Not all parameters {} are strings".format(parameters))
+					self.logger.error("----------------------------------------------------")		
+					if self.pure : raise TypeError("Not all parameters {} are strings".format(parameters))
+					return True
+			else:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __read_db__)")
+				self.logger.error(" Incorrect type of imported parameters. It should be string or list/tuple of string. {} is given".format(type(parameters)))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise TypeError("Incorrect type of exported parameters. It should be string or list/tuple of string. {} is given".format(type(parameters)))
+				return True
+			for param in parameters:
+				try:
+					xtree = d[record,param]
+				except BaseException as e:
+					self.logger.error("----------------------------------------------------")
+					self.logger.error(" METHODS ERROR in __read_db__)")
+					self.logger.error(" Cannot pool param {} from record {} in  data base {}: {}".format(param, record, dburl,e))
+					self.logger.error("----------------------------------------------------")		
+					if self.pure : raise ValueError("Cannot pool param {} from record {} in  data base {}: {}".format(param, record, dburl,e))
+					return True
+				for n in xtree:
+					if type(xtree[n]) is str or type(xtree[n]) is  unicode:
+						self.methods_txt[n] = xtree[n]
+					else:
+						self.methods[n] = xtree[n]
+			return False
 	
 	def gethash(self, name=''):
 		if not name in self.methods: return None
@@ -451,7 +510,7 @@ class methods:
 		@opt   var         - variable or list of variables which should be generated
 		@opt   target      - string of variable name which will be generate (need for lambda(s)), 
 		@opt   localcontext- local name space, usually = globals() or locals()
-		@opt   prohibit    - list of name which should be generated
+		@opt   prohibit    - list of name which shouldn't be generated
 		@opt   text        - bool If true populate tree by strings not actual values
 		"""
 		self.target = self.dtarget if target is None else target
