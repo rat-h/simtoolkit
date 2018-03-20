@@ -249,6 +249,13 @@ class sqlite_v_0_1:
 						   record    INTEGER,
 						   tag       TEXT );
 			''',
+			'''CREATE TABLE IF NOT EXISTS stkmms(
+						   id        INTEGER PRIMARY KEY AUTOINCREMENT,
+						   record    INTEGER,
+						   format    TEXT,
+						   name      TEXT,
+						   data      BLOB );
+			''',
 			'''CREATE TEMPORARY VIEW IF NOT EXISTS stkview AS SELECT
 					stkrecords.id        AS id,
 					stkrecords.timestamp AS timestamp,
@@ -566,6 +573,7 @@ class sqlite_v_0_1:
 			self.logger.error(" Cannot fetch items for key: {} : {}".format(key, e))
 			self.logger.error("----------------------------------------------------")		
 			raise RuntimeError("Cannot fetch items for key: {} : {}".format(key, e))
+
 #-------- NEED TO THINK ABOUT IT -----------------#
 	def __delitem__(self,key): pass #!!!!!
 #-------- NEED TO THINK ABOUT IT -----------------#
