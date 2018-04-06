@@ -122,6 +122,12 @@ class db:
 		self.rmtag        = self.db.rmtag
 		self.pooltags     = self.db.pooltags
 		self.tags         = self.db.tags
+		#---    Multimedia   ---
+		self.setmm        = self.db.setmm
+		self.getmm        = self.db.getmm
+		self.rm_mm        = self.db.rm_mm
+		self.poolmms      = self.db.poolmms
+		self.mms          = self.db.mms
 		#---   Information   ---
 		self.info         = self.db.info
 	def packvalue(self,name,value):
@@ -159,34 +165,36 @@ def sqlite(dburl, packvalue, unpackvalue, mode, architecture):
 		logger.error("----------------------------------------------------")		
 		raise RuntimeError("Cannot open data base file {} : {}".format(dburl, e))
 	### Init DB IF NEEDED###
-	try:
-		db.execute("CREATE TABLE IF NOT EXISTS stk_attributes (attribute TEXT PRIMARY KEY , value TEXT);")
-		db.commit()
-	except BaseException as e:
-		logger.error("----------------------------------------------------")
-		logger.error(" DATABASE ERROR")
-		logger.error(" Cannot create attributes table in data base file {} : {}".format(dburl, e))
-		logger.error("----------------------------------------------------")		
-		raise RuntimeError("Cannot create attributes table in data base file {} : {}".format(dburl, e))
-	for atr,value in ('version','0.1'),('architecture',architecture),('format','File'):
+	if mode != "ro":
 		try:
-			db.execute("INSERT OR IGNORE INTO stk_attributes (attribute, value) VALUES(?,?);",(atr,value))
+			db.execute("CREATE TABLE IF NOT EXISTS stk_attributes (attribute TEXT PRIMARY KEY , value TEXT);")
 			db.commit()
 		except BaseException as e:
 			logger.error("----------------------------------------------------")
 			logger.error(" DATABASE ERROR")
-			logger.error(" Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
+			logger.error(" Cannot create attributes table in data base file {} : {}".format(dburl, e))
 			logger.error("----------------------------------------------------")		
-			raise RuntimeError("Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
-	try:
-		db.execute("REPLACE INTO stk_attributes (attribute, value) VALUES('filename',?);",(dburl,))
-		db.commit()
-	except BaseException as e:
-		logger.error("----------------------------------------------------")
-		logger.error(" DATABASE ERROR")
-		logger.error(" Cannot insert filename into data base file {} : {}".format(dburl, e))
-		logger.error("----------------------------------------------------")		
-		raise RuntimeError("Cannot insert filename into data base file {} : {}".format(dburl, e))
+			raise RuntimeError("Cannot create attributes table in data base file {} : {}".format(dburl, e))
+		for atr,value in ('version','0.1'),('architecture',architecture),('format','File'):
+			try:
+				db.execute("INSERT OR IGNORE INTO stk_attributes (attribute, value) VALUES(?,?);",(atr,value))
+				db.commit()
+			except BaseException as e:
+				logger.error("----------------------------------------------------")
+				logger.error(" DATABASE ERROR")
+				logger.error(" Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
+				logger.error("----------------------------------------------------")		
+				raise RuntimeError("Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
+		try:
+			db.execute("REPLACE INTO stk_attributes (attribute, value) VALUES('filename',?);",(dburl,))
+			db.commit()
+		except BaseException as e:
+			logger.error("----------------------------------------------------")
+			logger.error(" DATABASE ERROR")
+			logger.error(" Cannot insert filename into data base file {} : {}".format(dburl, e))
+			logger.error("----------------------------------------------------")		
+			raise RuntimeError("Cannot insert filename into data base file {} : {}".format(dburl, e))
+	### Pool version ###
 	try:
 		v = db.execute("SELECT value FROM stk_attributes WHERE attribute= \'version\' ;").fetchone()
 	except BaseException as e:
@@ -278,16 +286,17 @@ class sqlite_v_0_1:
 					FROM stktags INNER JOIN stkrecords
 					ON stkrecords.id=stktags.record ;
 			''']
-		for cmd in init_db:
-			try:
-				self.db.execute(cmd)
-				self.db.commit()
-			except BaseException as e :
-				self.logger.error("----------------------------------------------------")
-				self.logger.error(" DATABASE ERROR in __init__")
-				self.logger.error(" Cannot execute initiation sequence  {} : {}".format(cmd, e))
-				self.logger.error("----------------------------------------------------")		
-				raise RuntimeError("Cannot execute initiation sequence  {} : {}".format(cmd, e))
+		if self.mode != "ro":
+			for cmd in init_db:
+				try:
+					self.db.execute(cmd)
+					self.db.commit()
+				except BaseException as e :
+					self.logger.error("----------------------------------------------------")
+					self.logger.error(" DATABASE ERROR in __init__")
+					self.logger.error(" Cannot execute initiation sequence  {} : {}".format(cmd, e))
+					self.logger.error("----------------------------------------------------")		
+					raise RuntimeError("Cannot execute initiation sequence  {} : {}".format(cmd, e))
 	def info(self):
 		info = {}
 		for atribute,value in self.db.execute("SELECT * FROM stk_attributes;"): info[atribute] = value
@@ -607,11 +616,7 @@ class sqlite_v_0_1:
 			self.logger.error("----------------------------------------------------")		
 			raise TypeError("Incorrect key type. It should be string or int. {} is given".format(type(key)))
 			
-		
-
-	def __iter__(self):
-		for rechash,timestemp,message in self.db.execute("SELECT hash,timestamp,message FROM stkrecords;"):
-			yield rechash,timestemp,message
+#### Debug interfaces >>>
 	def recs(self,flt=None,column=None):
 		SQL = "SELECT id,hash,timestamp,message FROM stkrecords"
 		if flt is None:			SQL += ";"
@@ -674,6 +679,13 @@ class sqlite_v_0_1:
 			raise TypeError("Incorrect filter type. It should be int: {} is given".format(type(flt)))
 		for valid,record,name,valtype,value in self.db.execute(SQL,{'flt':flt}): 
 			yield valid,record,name,self.unpackvalue("RAW"+valtype,valtype,value)
+#<<< Debug interfaces ###
+
+#### Iterators        >>>
+	def __iter__(self):
+		for rechash,timestemp,message in self.db.execute("SELECT hash,timestamp,message FROM stkrecords;"):
+			yield rechash,timestemp,message
+	
 	def pool(self, key, name):
 		if name[-1] == "/" :name += "*"
 		if type(key) is int:
@@ -695,6 +707,7 @@ class sqlite_v_0_1:
 			self.logger.error(" Cannot fetch value for key: {} and name {}: {}".format(key,name, e))
 			self.logger.error("----------------------------------------------------")		
 			raise RuntimeError("Cannot fetch value for key: {} and name {}: {}".format(key,name, e))
+	
 	def poolrecs(self,key):
 		if type(key) is int:
 			SQL = "SELECT hash,timestamp,message FROM stkrecords WHERE id=:key ;"
@@ -738,6 +751,9 @@ class sqlite_v_0_1:
 			self.logger.error(" Cannot fetch names for any key {} : {}".format(key,e))
 			self.logger.error("----------------------------------------------------")		
 			raise RuntimeError("Cannot fetch names for any key {} : {}".format(key,e))
+#<<< Iterators        ###
+
+#### TAGS             >>>
 	def settag(self,key,tag):
 		if self.mode == "ro":
 			self.logger.error("----------------------------------------------------")
@@ -752,7 +768,7 @@ class sqlite_v_0_1:
 				self.logger.error("----------------------------------------------------")		
 				raise RuntimeError("Tag cannot contains * or % characters. Given {}".format(tag))
 		if type(key) is int:
-			SQL = "SELECT id FROM stkrecords WHERE id=:key;"
+			SQL = "SELECT id FROM stkrecords WHERE id=:key"
 		elif type(key) is str or type(key) is unicode:
 			if "%" in key:
 				self.logger.error("----------------------------------------------------")
@@ -760,23 +776,22 @@ class sqlite_v_0_1:
 				self.logger.error(" key cannot contains % character. Given {}".format(key))
 				self.logger.error("----------------------------------------------------")		
 				raise ValueError("key cannot contains % character. Given {}".format(key))
-			SQL = "SELECT id FROM stkrecords WHERE timestamp=:key OR hash=:key;"
+			SQL = "SELECT id FROM stkrecords WHERE timestamp=:key OR hash=:key"
 		else:
 			self.logger.error("----------------------------------------------------")
 			self.logger.error(" DATABASE ERROR in settag")
 			self.logger.error(" Incorrect key type. It should be int or string. {} is given".format(type(key)))
 			self.logger.error("----------------------------------------------------")		
 			raise TypeError("Incorrect key type. It should be int or string. {} is given".format(type(key)))
-		for recid, in self.db.execute(SQL,{'key':key}):
-			try:
-				self.db.execute("INSERT INTO stktags(record,tag) VALUES(?,?);",[recid,str(tag)])
-				self.db.commit()
-			except BaseException as e:
-				self.logger.error("----------------------------------------------------")
-				self.logger.error(" DATABASE ERROR in settag")
-				self.logger.error(" Cannot set tag: {} for key {}: {}".format(tag,key,e))
-				self.logger.error("----------------------------------------------------")		
-				raise RuntimeError("Cannot set tag: {} for key ;{}: {}".format(tag,key,e))
+		try:
+			self.db.execute("INSERT INTO stktags(record,tag) VALUES(("+SQL+"),:tag);",{'key':key,'tag':str(tag)})
+			self.db.commit()
+		except BaseException as e:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in settag")
+			self.logger.error(" Cannot set tag: {} for key {}: {}".format(tag,key,e))
+			self.logger.error("----------------------------------------------------")		
+			raise RuntimeError("Cannot set tag: {} for key ;{}: {}".format(tag,key,e))
 	def rmtag(self,key):
 		if self.mode == "ro":
 			self.logger.error("----------------------------------------------------")
@@ -805,7 +820,53 @@ class sqlite_v_0_1:
 	def tags(self):
 		for tag,recid in self.db.execute("SELECT tag,id FROM stktagview"):
 			yield tag,recid
+#<<< TAGS             ###
 
+#### MMS              >>>
+	def setmm  (self, key, name, datatype, data):
+		if self.mode == "ro":
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in setmm")
+			self.logger.error(" Cannot set a tag in the read-only data base")
+			self.logger.error("----------------------------------------------------")		
+			raise ValueError("Cannot set a tag in the read-only data base")
+		if "%" in tag or "*" in name:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" DATABASE ERROR in setmm")
+				self.logger.error(" name cannot contains * or % characters. Given {}".format(name))
+				self.logger.error("----------------------------------------------------")		
+				raise RuntimeError("name cannot contains * or % characters. Given {}".format(name))
+		if type(key) is int:
+			SQL = "SELECT id FROM stkrecords WHERE id=:key"
+		elif type(key) is str or type(key) is unicode:
+			if "%" in key:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" DATABASE ERROR in setmm")
+				self.logger.error(" key cannot contains % character. Given {}".format(key))
+				self.logger.error("----------------------------------------------------")		
+				raise ValueError("key cannot contains % character. Given {}".format(key))
+			SQL = "SELECT id FROM stkrecords WHERE timestamp=:key OR hash=:key"
+		else:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in setmm")
+			self.logger.error(" Incorrect key type. It should be int or string. {} is given".format(type(key)))
+			self.logger.error("----------------------------------------------------")		
+			raise TypeError("Incorrect key type. It should be int or string. {} is given".format(type(key)))
+		try:
+			self.db.execute("INSERT INTO stkmms(record,format,name,data) VALUES(("+SQL+"),,:format,:name,:data);",{'key':key,'format':datatype,'name':name,'data':data})
+			self.db.commit()
+		except BaseException as e:
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in setmm")
+			self.logger.error(" Cannot set multimedia {} format({}) : for key {}: {}".format(name, datatype, key,e))
+			self.logger.error("----------------------------------------------------")		
+			raise RuntimeError("Cannot set multimedia {} format({}) : for key {}: {}".format(name, datatype, key,e))
+
+	def getmm  (self, key, name): pass
+	def rm_mm  (self, key, name): pass
+	def poolmms(self, key=None, name=None): pass
+	def mms(self): pass
+#<<< MMS              ###
 			
 		
 if __name__ == "__main__":
