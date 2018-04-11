@@ -6,10 +6,10 @@ stkdb contains 5 tables: records, names, values, tags, mms
 
 ### Tables:
 **table _stkrecords_** has columns:
-1. id        INTEGER PRIMARY KEY AUTOINCREMENT - record ID
-2. timestamp DATETIME                          - record data and time
-3. hash      TEXT                              - record hash sum
-4. message   TEXT                              - message or comment on simulation or files update
+1. id        INTEGER PRIMARY KEY AUTOINCREMENT - record ID (simulation ID)
+2. timestamp DATETIME                          - record (simulation) date and time
+3. hash      TEXT                              - record (simulation) hash sum
+4. message   TEXT                              - message or comment on simulation result
 
 **table _stknames_** has columns:
 1. id        INTEGER PRIMARY KEY AUTOINCREMENT - parameter name ID 
