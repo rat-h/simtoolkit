@@ -5,6 +5,10 @@ import sqlite3
 from urlparse import urlparse
 from simtoolkit.tree import tree
 import numpy  as np
+try:
+	import cPickle as pickle
+except:
+	import pickle
 
 class db:
 	def __init__(self, dburl, mode="", username="", password="", architecture=platform.machine() ):
@@ -138,12 +142,14 @@ class db:
 				np.save(fd,value)
 				return 'ZIPNUMPY',buffer(zlib.compress(fd.getvalue(),9))
 		else:
-			return 'ZIP',buffer(zlib.compress("{}".format(value),9))
+			return 'ZIPPKL',buffer(zlib.compress(pickle.dumps(value),9))
 	def unpackvalue(self,name,valtype,value):
 		if   valtype == "TEXT"    : return value
 		elif valtype == "NUMPY"   : return np.load(io.BytesIO(value))
+		elif valtype == "PKL"     : return pickle.loads(value)
 		elif valtype == "ZIP"     : return zlib.decompress(value)
 		elif valtype == "ZIPNUMPY": return np.load(io.BytesIO(zlib.decompress(value)))
+		elif valtype == "ZIPPKL"  : return pickle.loads(zlib.decompress(value))
 		else:
 			logger.error("----------------------------------------------------")
 			logger.error(" DATABASE ERROR in uppackvalue")
