@@ -1,15 +1,19 @@
-import os, sys, types, logging, hashlib, zlib, threading, io, time, struct
+import os, sys, types, logging, hashlib, zlib, threading, io, time, struct, psutil
 from multiprocessing import Process, Queue 
 
 from numpy import *
 
 from simtoolkit.tree import tree
 
+logging.DEEPDEBUG = 5
+logging.addLevelName(logging.DEEPDEBUG, "DEEPDEBUG")
+logging.Logger.deepdebug = lambda inst, msg, *args, **kwargs: inst.log(logging.DEEPDEBUG, msg, *args, **kwargs)
+logging.deepdebug = logging.Logger.deepdebug
 
 class data:
-	def __init__(self, filename, mode="r+", compress = 5, npcompress=False, parallel=False, maxbuffersize=0):
+	def __init__(self, filename, mode="r+", compress = 5, npcompress=False, parallel=False, maxbuffersize=0, repare=False):
 		self.logger = logging.getLogger("simtoolkit.data")
-		self.logger.debug(" > Open simdata: file={}, modw={}, compress={}, parallel={}, npcompress={}, maxbuffersize={}".format(filename, mode, compress, parallel, npcompress,maxbuffersize))
+		self.logger.deepdebug(" > Open simdata: file={}, modw={}, compress={}, parallel={}, npcompress={}, maxbuffersize={}".format(filename, mode, compress, parallel, npcompress,maxbuffersize))
 		self.filename = filename
 		if mode != "w":
 			self.readfooter()
@@ -21,14 +25,15 @@ class data:
 		self.parallel = parallel
 		self.npcompress = npcompress
 		self.maxbufsize = maxbuffersize
+		self.repare = repare
 		if self.maxbufsize < 1:
-			from psutil import virtual_memory
-			self.maxbufsize = virtual_memory().total/4
-			self.logger.debug(" < Receiver: maxbuffersize={}".format(self.maxbufsize))
+			self.maxbufsize = psutil.virtual_memory().total/4
+			self.logger.deepdebug(" < Receiver: maxbuffersize={}".format(self.maxbufsize))
 		if self.parallel:
 			self.queue   = Queue(maxsize = self.maxbufsize/10)
 			self.dthread = Process(target=self.savebuffer) 
 			self.dthread.start()
+			self.process = psutil.Process()
 			self.__exit__ = self.p__exit__
 			self.set      = self.pset
 			self.sync     = self.psync
@@ -47,7 +52,10 @@ class data:
 		try:
 			with open(self.filename,"wb") as fd: pass
 		except BaseException as e:
-			self.logger.error("File \'{}\' cannot be written: {}".format(self.filename,e))
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATA ERROR in initfooter")
+			self.logger.error(" File \'{}\' cannot be written: {}".format(self.filename,e))
+			self.logger.error("----------------------------------------------------")		
 			raise ValueError("File \'{}\' cannot be written: {}".format(self.filename,e))
 
 	def readfooter(self):
@@ -67,8 +75,14 @@ class data:
 					#importing back to the tree
 					self.datamap = tree().imp( eval(zlib.decompress(fd.read(idx)) ) )
 			except BaseException as e:
-				self.logger.warning("Cannot open file \'{}\': {}".format(self.filename,e))
-				raise RuntimeError("Cannot open file \'{}\': {}".format(self.filename,e))
+				self.logger.warning("----------------------------------------------------")
+				self.logger.warning(" DATA ERROR in readfooter")
+				self.logger.warning(" Cannot open file \'{}\': {}".format(self.filename,e))
+				self.logger.warning("----------------------------------------------------")		
+				if not self.repare:
+					raise RuntimeError("Cannot open file \'{}\': {}".format(self.filename,e))
+				else:
+					self.repare_file()
 				#self.initfooter()
 		else:
 			self.initfooter()
@@ -79,9 +93,16 @@ class data:
 			if not fl is None: continue
 			if self.tail <= st+sz: self.tail = st+sz+1
 
+	def repare_file(self):
+		"TODO: needs to scan a file, find all headers and for all records and restore footer"
+		pass
+
 	def writefooter(self):
 		if self.filename is None:
-			self.logger.warning("Cannot write footer into virtual file")
+			self.logger.warning("----------------------------------------------------")
+			self.logger.warning(" DATA ERROR in writefooter")
+			self.logger.warning(" Cannot write footer into virtual file")
+			self.logger.warning("----------------------------------------------------")
 			return
 		with open(self.filename,"rb+") as fd:
 			fd.seek( self.tail )
@@ -98,8 +119,7 @@ class data:
 			if self.compres:
 				return name, zlib.compress(data,self.compres),"ZSTRING"
 			else:
-				return name, data,"STRING"
-			
+				return name, data,"STRING"	
 		elif not isinstance(data,ndarray):
 			if self.compres:
 				return name, zlib.compress(str(data),self.compres),"ZPYTHON"
@@ -113,9 +133,12 @@ class data:
 				else:
 					return name, fd.getvalue() ,"NUMPY"
 
-	def savedata(self,name,data,datatype):
+	def __save_chunk__(self,name,data,datatype):
 		if self.filename is None:
-			self.logger.warning("Cannot save data into virtual file")
+			self.logger.warning("----------------------------------------------------")
+			self.logger.warning(" DATA ERROR in __save_chunk__")
+			self.logger.warning(" Cannot save data into virtual file")
+			self.logger.warning("----------------------------------------------------")
 			return
 		#if self.mtime != os.stat(self.filename).st_mtime: self.readfooter()
 		with open(self.filename,"rb+") as fd:
@@ -135,25 +158,18 @@ class data:
 				self.datamap[name] = [chrec]
 			self.tail += 10 + len(chheader) + datasize #+1 ? <<
 		return self
-	def __enter__(self): return self
-	def s__exit__(self, exc_type, exc_value, traceback):
-		self.writefooter()
-		
-	def __setitem__(self,key,value): self.set(key,value)
-	def sset(self,name,data):
-		self.savedata( *self.zipper( name, data ) )
-		return self
-			
-	def ssync(self):
-		self.writefooter()
-
+	def __enter__(self)                                : return self
+	def s__exit__(self, exc_type, exc_value, traceback): self.writefooter()
+	def __setitem__(self,key,value)                    : self.set(key,value)
+	def sset(self,name,data)                           : return self.__save_chunk__( *self.zipper( name, data ) )
+	def ssync(self)                                    : self.writefooter()
 	def __getitem__(self,key): 
 		if key is None: return self.dict()
 		return self.get(key)
 	def __read_chunk__(self,fl,st,sz,tp):
 		with open(self.filename if fl is None else fl,"rb") as fd:
 			fd.seek(st)
-			if tp == "ZNUMPY":
+			if   tp == "ZNUMPY":
 				return load(io.BytesIO(zlib.decompress(fd.read(sz)))) 
 			elif tp == "NUMPY":
 				return  load(io.BytesIO(fd.read(sz)))
@@ -166,14 +182,20 @@ class data:
 			elif tp == "STRING":
 				return  fd.read(sz)
 			else: 
-				self.logger.error("Unsopported data format for name {}: {}".format(name, tp))
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" DATA ERROR in __read_chunk__")
+				self.logger.error(" Unsopported data format for name {}: {}".format(name, tp))
+				self.logger.error("----------------------------------------------------")
 				raise RuntimeError("Unsopported data format for name {}: {}".format(name, tp))
 	def get(self, name):
 		if (not self.filename is None) and self.mtime != os.stat(self.filename).st_mtime: self.readfooter()
 		#if type(name) is tuple:
 		#	name,chunk = name
 		if not name in self.datamap:
-			self.logger.error("Cannot find  record {}".format(name))
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATA ERROR in get")
+			self.logger.error(" Cannot find  record {}".format(name))
+			self.logger.error("----------------------------------------------------")
 			raise RuntimeError("Cannot find  record {}".format(name))
 		ret = []
 		for fl, st, sz, tp in self.datamap[name]:
@@ -182,85 +204,73 @@ class data:
 			if dname == name: ret.append(ddata)
 		return ret
 
-	#def aggregate(self,*simdatafiles):
-		#for f in simdatafiles:
-			#with simdata(f) as tsd:
-				#for name in tsd:
-					#if type(tsd.datamap[name]) is list:
-						#self.types[name   ] =      [  tsd.types[name][nameid] for nameid in xrange( len(tsd.datamap[name]) ) ]
-						#self.datamap[name ] = ( f, [  tsd.datatab[recid]      for recid  in tsd.datamap[name] ] )
-						
-					#elif type(tsd.datamap[name]) is list and len(self.datamap[name]) == 2:
-						#self.datamap[name] = tsd.datamap[name]
-						#self.types[name]   = tsd.types[name]
-					#else:
-						#self.logger.error( "Cannot indemnify type of file {}".format(f))
-						#raise RuntimeError("Cannot indemnify type of file {}".format(f))
+	def aggregate(self,*sdkdatafiles):
+		for f in stkdatafiles:
+			with data(f) as tsd:
+				for name in tsd:
+					if not name in self.datamap: self.datamap[name]=[]
+					self.datamap[name] += [ (f,st,sz,tp) for fl,st,sz,tp in tsd.daamap[name] ]
 
 	def __contains__(self,key): return key in self.datamap
-	#def associate(self, name, obj):
-		#if self.mtime != os.stat(self.filename).st_mtime: self.readfooter()
-		#buf = pkl.dumps( (self.datamap, self.datatab, self.associate) )
 	def __iter__(self):
-		for name in self.datamap.__iter__():#super(methodtree, self).keys():
-			yield name
+		for name in self.datamap       : yield name
 	def dict(self):
-		for name in self.datamap.dict().__iter__():#super(methodtree, self).keys():
-			yield name
+		for name in self.datamap.dict(): yield name
 
 
 	#### Parallel Functions ####
 	def p__exit__(self, exc_type, exc_value, traceback):
 		self.sync()
-		self.logger.debug(" > Sender: Termination")
+		self.logger.deepdebug(" > Sender: Termination")
 		self.queue.put([])
-		self.logger.debug(" > Sender: Wating to join ... ")
+		self.logger.deepdebug(" > Sender: Wating to join ... ")
 		self.dthread.join()
-		self.logger.debug(" > Sender: Receiver has joined ")
+		self.logger.deepdebug(" > Sender: Receiver has joined ")
 		
 	def pset(self,name,data):
 		self.bufdata.append( (name,data) )
-		if len(self.bufdata) >= self.nproc:
-			if not self.dthread.is_alive() : 
-				self.logger.error("Receiver DEAD!")
+		#if self.process.memory_info().rss >= self.maxbufsize/100:
+		if len(self.bufdata) >= self.parallel:
+			if not self.dthread.is_alive() :
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" DATA ERROR in pset")
+				self.logger.error(" Receiver DEAD!")
+				self.logger.error("----------------------------------------------------")
 				raise RuntimeError("Receiver DEAD!")
-			self.logger.debug("Sender: ZIPPPPING.....")
-			pids = [ threading.Thread(target=self.pzipper, args=(idx,)) for idx in xrange(self.nproc) ]
-			for pid in pids: pid.start()
-			for pid in pids: pid.join()
-			self.logger.debug("Sender: Sendding into pipe ... ")
+			self.logger.deepdebug(" > Sender: ZIPPPPING.....")
+			#pids = [ threading.Thread(target=self.pzipper, args=(idx,)) for idx in xrange(self.parallel) ]
+			for pload in xrange(0,len(self.bufdata),self.parallel):
+				lastid = pload+self.parallel if pload+self.parallel < len(self.bufdata) else len(self.bufdata)
+				self.logger.deepdebug(" > Sender: ZIPPING {}-{}".format(pload,lastid))
+				pids = [ threading.Thread(target=self.pzipper, args=(idx,)) for idx in xrange(pload,lastid) ]
+				for pid in pids: pid.start()
+				for pid in pids: pid.join()
+			self.logger.deepdebug(" > Sender: Sendding into pipe ... ")
 			self.queue.put( self.bufdata )
-			self.logger.debug("Sender: Cleaning memory " )
+			self.logger.deepdebug(" > Sender: Cleaning memory " )
 			self.bufdata = []
 			
 	def psync(self):
+		self.logger.deepdebug(" > Synch: ZIPPPPING.....")
 		pids = [ threading.Thread(target=self.pzipper, args=(idx,)) for idx in xrange( len(self.bufdata) ) ]
 		for pid in pids: pid.start()
 		for pid in pids: pid.join()
-		self.logger.debug("Sender: Sendding into pipe ... ")
+		self.logger.deepdebug(" > Synch: Sendding into pipe ... ")
 		self.queue.put( self.bufdata )
-		self.logger.debug("Sender: Cleaning memory " )
+		self.logger.deepdebug(" > Synch: Cleaning memory " )
 		self.bufdata = []
-		self.logger.debug("Sender: Sendding synch " )
+		self.logger.deepdebug(" > Synch: Sendding synch " )
 		self.queue.put( [[]] )
 		if not self.dthread.is_alive() : 
-			self.logger.error("Receiver DEAD!")
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATA ERROR in psync")
+			self.logger.error(" Receiver DEAD!")
+			self.logger.error("----------------------------------------------------")
 			raise RuntimeError("Receiver DEAD!")
 			
 	def pzipper(self,idx):
-		if not isinstance(self.bufdata[idx][1],ndarray):
-			if self.compres:
-				self.bufdata[idx] = self.bufdata[idx][0],zlib.compress(str(self.bufdata[idx][1]),self.compres), "ZPYTHON"
-			else:
-				self.bufdata[idx] = self.bufdata[idx][0],str(self.bufdata[idx][1]), "PYTHON"
-		else:
-			with io.BytesIO() as fd:
-				save(fd, self.bufdata[idx][1])
-				if self.npcompress:
-					self.bufdata[idx] = self.bufdata[idx][0],zlib.compress(fd.getvalue(),self.compres), "ZNUMPY"
-				else:
-					self.bufdata[idx] = self.bufdata[idx][0],fd.getvalue(), "NUMPY"
-				
+		self.bufdata[idx] = self.zipper( *self.bufdata[idx] )
+		#self.logger.deepdebug(" < Receiver: zipped data len {} ".format(len(self.bufdata[idx])) )
 
 	def savebuffer(self):
 		"""
@@ -269,44 +279,43 @@ class data:
 		"""
 		self.bufdata = []
 		self.sthread = threading.Thread(target=self.savebuffed)
-		self.bufsize = 0
+		self.process = psutil.Process()
 		if self.maxbufsize < 1:
-			from psutil import virtual_memory
-			self.maxbufsize = virtual_memory().total/4
-			self.logger.debug(" < Receiver: maxbuffersize={}".format(self.maxbufsize))
+			self.maxbufsize = psutil.virtual_memory().total/4
+			self.logger.deepdebug(" < Receiver: maxbuffersize={}".format(self.maxbufsize))
 		while 1:
 			dbuf = self.queue.get()
 			if len(dbuf) == 0:
 				if self.sthread.is_alive():self.sthread.join()
 				self.savebuffed()
 				self.writefooter()
-				self.logger.debug(" < Receiver: TERMINATION " )
+				self.logger.deepdebug(" < Receiver: TERMINATION " )
 				return
 			elif len(dbuf) == 1 and len(dbuf[0]) == 0:
 				if self.sthread.is_alive():self.sthread.join()
 				self.savebuffed()
 				self.writefooter()
-				self.logger.debug(" < Receiver: Synchronization " )
+				self.logger.deepdebug(" < Receiver: Synchronization " )
 			else:
 				#sys.stderr.write("Receive {} {}\r".format(dbuf[0][0],dbuf[-1][0]))
 				#TODO >>if self.sthread.is_alive(): 	self.sthread.join()
 				#B.nbytes
 				self.bufdata += dbuf
-				self.bufsize += reduce(lambda x,y: len(y[1])+x, dbuf, 0)
-				while self.bufsize >= self.maxbufsize:
+				self.logger.deepdebug(" < Receiver: Check memory overflow .... " )
+				while self.process.memory_info().rss >= self.maxbufsize:
 					if not self.sthread.is_alive():
 						self.sthread = threading.Thread(target=self.savebuffed)
 						self.sthread.start()
 					time.sleep(1)
-			if len(self.bufdata) > 100:
+				self.logger.deepdebug(" < Receiver: Check point has been passed " )
+			if self.process.memory_info().rss >= self.maxbufsize/100:
 				if not self.sthread.is_alive():
 					self.sthread = threading.Thread(target=self.savebuffed)
 					self.sthread.start()
 	def savebuffed(self):
 		while len(self.bufdata) != 0:
 			name,data,datatype = self.bufdata[0]
-			self.savedata(name, data, datatype)
-			self.bufsize -= len(data)
+			self.__save_chunk__( name,data,datatype )
 			self.bufdata=self.bufdata[1:]	
 
 
@@ -333,10 +342,10 @@ if __name__ == "__main__":
 	#print data(sys.argv[1]).get("/prime",1)
 	print data(sys.argv[1]).get("/simple")
 
-	print data(sys.argv[1]).get("/np/array")
-	print type(data(sys.argv[1]).get("/np/array"))
-	print type(data(sys.argv[1]).get("/np/array")[0])
-	print data(sys.argv[1]).get("/np/array")[0].shape
+	print "print      data[\"/np/array\"]    =",     data(sys.argv[1]).get("/np/array")
+	print "print type(data[\"/np/array\"]   )=",type(data(sys.argv[1]).get("/np/array"))
+	print "print type(data[\"/np/array\"][0])=",type(data(sys.argv[1]).get("/np/array")[0])
+	print "print data[\"/np/array\"][0].shape=",     data(sys.argv[1]).get("/np/array")[0].shape
 	
 	print data(sys.argv[1]).get("/x/np/array")
 	print type(data(sys.argv[1]).get("/x/np/array"))
