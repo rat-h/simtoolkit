@@ -385,6 +385,8 @@ class methods:
 	# They mostly redirect calls to self.methods tree
 	def __setitem__(self, key, value): self.methods.__setitem__(key, value)
 	def __getitem__(self, key)       : 
+		if key[0] == "#":
+			return self.gethash(key[1:])
 		if not self.methods.__contains__(key) and self.methods_txt.__contains__(key):
 			if self.generate(var=key):
 				self.logger.error("----------------------------------------------------")
@@ -393,8 +395,6 @@ class methods:
 				self.logger.error("----------------------------------------------------")		
 				if self.pure : raise KeyError("Cannot resolve generate key {}".format(key))
 				return None
-		if key[0] == "#":
-			return self.gethash(key[1:])
 		return self.methods.__getitem__(key)
 	def __contains__(self,key)       : 
 		return self.methods.__contains__(key) or self.methods_txt.__contains__(key)
