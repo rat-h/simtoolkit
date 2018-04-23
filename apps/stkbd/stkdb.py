@@ -2,8 +2,6 @@
 
 import sys, os, optparse, platform, time, re, commands, logging
 
-logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=logging.DEBUG)
-
 from simtoolkit import db, tree
 from datetime import datetime
 from random import randint
@@ -64,7 +62,16 @@ option_parser.add_option("-l", "--list-parameters",  action="store_true",    des
 				help="Print out parameters as a tree, not a table") 
 option_parser.add_option(      "--print-full",       action="store_true",    dest="printfull",  default=False,\
 				help="Shows all parameters for every simulation record") 
+option_parser.add_option(      "--log-level",                                dest="log_level",  default="DEBUG",\
+				help="Level of logging may be CRITICAL, ERROR, WARNING, INFO, or DEBUG (default DEBUG)") 
+option_parser.add_option(      "--log-file",                                 dest="log_file",  default=None,\
+				help="Log file name (default None)") 
 options, args = option_parser.parse_args()
+
+if options.log_file != None:
+	logging.basicConfig(file=options.log_file, format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=eval("logging."+options.log_level) )
+else:
+	logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=eval("logging."+options.log_level) )
 
 if len(args) < 2:
 	sys.stderr.write("\n-----------------------\n"+\
