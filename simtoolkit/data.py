@@ -132,6 +132,7 @@ class data_file:
 		self.logger.deepdebug(" > Open simdata: file={}, modw={}, compress={}, parallel={}, npcompress={}, maxbuffersize={}".format(filename, mode, compress, parallel, npcompress,maxbuffersize))
 		self.filename = filename
 		self.autocorrection = autocorrection
+		self.autodefragmentation = autodefragmentation
 		self.mode = mode
 		if mode != "w":
 			self.readfooter()				
@@ -503,13 +504,38 @@ class data_file:
 	def dict(self):
 		for name in self.datamap.dict(): yield name
 	def __delitem__(self,key):
-		del self.datamap[key]
+		if type(key) is str or type(key) is unicode :
+			del self.datamap[key]
+		elif type(key) is tuple:
+			name = key[0]
+			if not name in self.datamap:
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" DATA ERROR in __delitem__")
+				self.logger.error(" Cannot find  record {}".format(name))
+				self.logger.error("----------------------------------------------------")
+				raise RuntimeError("Cannot find  record {}".format(name))
+			if   len(key) == 1 : return self.__delitem__(name)
+			elif len(key) == 2 :
+				chunk = key[1]
+				if type(chunk) is int:
+					self.datamap[name] = self.datamap[name][:chunk]+self.datamap[name][chunk+1:]
+				elif type(chunk) is tuple:
+					sl = slice(*chunk)
+					del self.datamap[name][sl]
+			else :
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" DATA ERROR in __delitem__")
+				self.logger.error(" Too many chunks to delete in {}, use one chunk at the time or slice notation".format(name))
+				self.logger.error("----------------------------------------------------")
+				raise RuntimeError("Too many chunks to delete in {}, use one chunk at the time or slice notation".format(name))
 		if self.autodefragmentation: self.defragmentation()
 	#--- TODO ---#
 	def defragmentation(self): pass
 	# it should go over all names and check gaps in data positions
 	#  after deletion. If there are gaps, it should move data and reset 
 	#  file size.
+		#chrec = ( None, self.tail+10+len(chheader), datasize, datatype )
+		#reclist = [ (st,st+sz,nm) for nm in self for fl,st,sz,tp in self.datamap[nm] ]
 	def __call__(self,name,*key):
 		"""
 		Possible syntaxes:
