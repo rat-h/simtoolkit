@@ -476,20 +476,6 @@ class data_file:
 			self.logger.error(" Incorrect type of key {}.".format(key))
 			self.logger.error("----------------------------------------------------")
 			raise RuntimeError("Incorrect type of key {}.".format(key))
-	def __call__(self,name,*key):
-		"""
-		Possible syntaxes:
-		data(None)            -> 
-		data(None,None)       -> 
-		data('/name')         -> returns a concatenation of all data under /name 
-		data('/name',2)       -> 
-		data('/name',2,5,7)   -> returns a concatenation of chunks 2, 5 and 7 of /name 
-		data('/name',None)    -> 
-		data('/name',)        -> 
-		data('/name',(3,7,2)) -> returns a concatenation of data in slice (3,7,2) for /name's chunks 
-		"""
-		if (not self.filename is None) and self.mtime != os.stat(self.filename).st_mtime: self.readfooter()
-		pass
 	def aggregate(self,*stkdatafiles):
 		for f in stkdatafiles:
 			if isinstance(f,data):
@@ -524,8 +510,22 @@ class data_file:
 	# it should go over all names and check gaps in data positions
 	#  after deletion. If there are gaps, it should move data and reset 
 	#  file size.
-
-
+	def __call__(self,name,*key):
+		"""
+		Possible syntaxes:
+		data(None)            -> 
+		data(None,None)       -> 
+		data('/name')         -> returns a concatenation of all data under /name 
+		data('/name',2)       -> 
+		data('/name',2,5,7)   -> returns a concatenation of chunks 2, 5 and 7 of /name 
+		data('/name',None)    -> 
+		data('/name',)        -> 
+		data('/name',(3,7,2)) -> returns a concatenation of data in slice (3,7,2) for /name's chunks 
+		"""
+		if (not self.filename is None) and self.mtime != os.stat(self.filename).st_mtime: self.readfooter()
+		pass
+	#-------------#
+	
 	#### Parallel Functions ####
 	def p_send2pipe(self):
 		if not self.dthread.is_alive() :
@@ -550,24 +550,10 @@ class data_file:
 		
 	def pset(self,name,data):
 		self.bufdata.append( (name,data) )
-		#if self.process.memory_info().rss >= self.maxbufsize/10:
 		if len(self.bufdata) >= self.parallel*4:
 			self.p_send2pipe()
 			self.logger.deepdebug(" > Sender: Memory size: {} - {}".format(self.process.memory_info().rss,self.maxbufsize) )
 
-		#self.bufdata.append( (name,data) )
-		##if self.process.memory_info().rss >= self.maxbufsize/100:
-		#if len(self.bufdata) >= self.parallel:
-			#self.logger.deepdebug(" > Sender: ZIPPPPING.....")
-			##pids = [ threading.Thread(target=self.pzipper, args=(idx,)) for idx in xrange(self.parallel) ]
-			#for pload in xrange(0,len(self.bufdata),self.parallel):
-				#lastid = pload+self.parallel if pload+self.parallel < len(self.bufdata) else len(self.bufdata)
-				#self.logger.deepdebug(" > Sender: ZIPPING {}-{}".format(pload,lastid))
-				#pids = [ threading.Thread(target=self.pzipper, args=(idx,)) for idx in xrange(pload,lastid) ]
-				#for pid in pids: pid.start()
-				#for pid in pids: pid.join()
-			#self.logger.deepdebug(" > Sender: Sendding into pipe ... ")
-			#self.queue.put( self.bufdata )
 			
 	def psync(self):
 		if len(self.bufdata) > 0: self.p_send2pipe()
@@ -586,6 +572,7 @@ class data_file:
 			self.sthread.start()
 		threading.Timer(3.141, self.runzippers).start()
 		self.pids = [ pid for pid in self.pids if pid.is_alive() ]
+		if len(self.prebuff) > 0: return
 		if len(self.pids) > self.parallel :
 			self.logger.deepdebug(" < Receiver: number of working threads = {} ".format(len(self.pids)) )
 			return
@@ -625,9 +612,8 @@ class data_file:
 		self.sthread = threading.Thread(target=self.savebuffed)
 		self.lock    = threading.Lock()
 		self.pids    = []
-		self.runzippers() #run timer-ed update of thread
-		#self.zthread = Process(target=self.savebuffer) 
-		#self.zthread.start()
+		self.runzippers() #run timer-ed update of threads
+		
 		
 		self.process = psutil.Process()
 		self.logger.deepdebug(" < Receiver: pid={}".format(self.process.pid) )
