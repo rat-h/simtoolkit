@@ -530,12 +530,54 @@ class data_file:
 				raise RuntimeError("Too many chunks to delete in {}, use one chunk at the time or slice notation".format(name))
 		if self.autodefragmentation: self.defragmentation()
 	#--- TODO ---#
-	def defragmentation(self): pass
+	def defragmentation(self): #pass
 	# it should go over all names and check gaps in data positions
 	#  after deletion. If there are gaps, it should move data and reset 
 	#  file size.
-		#chrec = ( None, self.tail+10+len(chheader), datasize, datatype )
-		#reclist = [ (st,st+sz,nm) for nm in self for fl,st,sz,tp in self.datamap[nm] ]
+		def findrec(start, mm,reclist):
+			
+			chheadersize, = struct.unpack(">H",mm[start+8:start+10])
+			p = start+10
+			sz,ch,ty,name = eval(mm[p:p+chheadersize])
+			st = start+10+chheadersize
+			ck = [ x for x,y,z in reclist ]
+			if st in ck:
+				idx = [ x for x,y,z in reclist ].index(st)
+				areclist.append( (start,reclist[idx][0],reclist[idx][1],reclist[idx][2]) )
+			
+		reclist  = [ (st,st+sz,nm) for nm in self for fl,st,sz,tp in self.datamap[nm] ]
+		areclist = []
+		with open(self.filename,"rw+b") as fd:
+			mm = mmap.mmap(fd.fileno(), 0)
+			l = len(mm)
+			start = 0
+			while mm[start:start+8] !='#STKDATA': start += 1
+			findrec(start,mm,reclist)
+			for f,t,m in reclist:
+				start=t+1
+				if mm[start:start+8] !='#STKDATA':
+					print "couldn't find",start
+					start=t+2
+					if mm[start:start+8] =='#STKDATA':
+						print "found at", start 
+						findrec(start,mm,reclist)
+				else:
+					findrec(start,mm,reclist)
+			areclist.sort()
+			reclist,shift = [], 0
+			for (s1,d1,z1,n1),(s2,d2,z2,n2) in zip(areclist[:-1],areclist[1:]):
+				if s2 != z1+1:
+					reclist.append((z1+1-shift,s2-shift))
+					shift += s2 - z1 -1
+			for s,d in reclist:
+				#print mm[d:d+8]
+				#print l, l-d+s, d, s, len(mm[s:l-d+s]), len(mm[d:])
+				mm[s:l-d+s] = mm[d:]
+		self.datamap = {}	
+		self.rescan_file()
+		
+		
+			
 	def __call__(self,name,*key):
 		"""
 		Possible syntaxes:
