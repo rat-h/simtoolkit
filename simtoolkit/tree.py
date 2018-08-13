@@ -1,4 +1,4 @@
-import os, sys, types, logging
+import os, sys, types, logging,json
 from collections import OrderedDict
 from numpy import *
 
@@ -110,28 +110,16 @@ class tree(OrderedDict):
 				yield (parent+self.hsymbol+n, mapd[n]) 
 	def exp(self):
 		"""
-		export content to a list of tuples (name,value)
+		export content to a json string
 		"""
-		return [ (name,self[name]) for name in self ]
+		return json.dumps(self)#[ (name,self[name]) for name in self ]
 	def imp(self, data):
 		"""
-		import from the list of tuples the structure
+		import from a tree structure and values from a json string
 		"""
-		if not type(data) is list:
-			self.logger.error("Can import data only from list of tuples, {} given".format(type(data)) )
-			raise TypeError(  "Can import data only from list of tuples, {} given".format(type(data)) )
-		if len(data) == 0:
-			self.logger.error("Empty data for importing")
-			raise ValueError( "Empty data for importing")
-		for idx, d in enumerate(data):
-			if not type(d) is tuple:
-				self.logger.error("Record {} for importing data is not a tuple".format(idx))
-				raise TypeError(  "Record {} for importing data is not a tuple".format(idx))
-			if len(d) != 2:
-				self.logger.error("Record {} for importing data doesn't have two fields (name and value): given {}".format(idx,d))
-				raise ValueError( "Record {} for importing data doesn't have two fields (name and value): given {}".format(idx,d))
-			name, value = d
-			self[name] = value
+		zjson = json.loads(data,object_pairs_hook=OrderedDict)
+		for name in zjson:
+			self[str(name)] = zjson[name]
 		return self
 	def printnames(self, space = "", parent="", sort=False):
 		root = []
@@ -171,7 +159,7 @@ if __name__ == "__main__":
 	print "x=", x
 	print "x.check(\"/a\")=",x.check("/a")
 	print "x.check(\"/z\")=",x.check("/z"),"\n 2------------"
-
+	
 	for n in x:
 		print "n=% 6s"%n,", x[n]=",x[n]
 	print " 3------------"

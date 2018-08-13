@@ -121,6 +121,7 @@ class data:
 		self.aggregate       = self.data.aggregate
 		self.dict            = self.data.dict
 		self.defragmentation = self.data.defragmentation
+		#self.set             = self.data.set
 
 		#---   Information   ---
 		#self.info         = self.db.info
@@ -202,7 +203,7 @@ class data_file:
 					fd.seek(-idx-8,2)
 					self.logger.deepdebug(" > rdft: shits to -{}-8,2={}".format(idx,(-idx-8,2)))
 					#importing back to the tree
-					self.datamap = tree().imp( eval(zlib.decompress(fd.read(idx)) ) )
+					self.datamap = tree().imp( zlib.decompress(fd.read(idx)) ) 
 					self.logger.deepdebug(" > rdft: the tree={}".format(self.datamap))
 			except BaseException as e:
 				self.logger.warning("----------------------------------------------------")
@@ -221,7 +222,7 @@ class data_file:
 		for n in self.datamap:
 			for fl,st,sz,tp in self.datamap[n]:
 				if not fl is None: continue
-				if self.tail <= st+sz: self.tail = st+sz+1
+				if self.tail <= st+sz: self.tail = st+sz #+1
 		self.logger.deepdebug(" > rdtf: self.tail={}".format(self.tail))
 
 	def rescan_file(self):
@@ -241,7 +242,7 @@ class data_file:
 					self.logger.error(" Chunk number {} of variable {} is not correct - should be".format(ch,name,Xch))
 					self.logger.error("----------------------------------------------------")
 				#checking chunk size
-				self.tail = start+10+chheadersize+sz+1
+				self.tail = start+10+chheadersize+sz #+1
 				if mm[self.tail:self.tail+8] == '#STKDATA':
 					start = self.tail
 				else:
@@ -336,7 +337,7 @@ class data_file:
 				self.datamap[name].append(chrec)
 			else:
 				self.datamap[name] = [chrec]
-			self.tail += 10 + len(chheader) + datasize +1 
+			self.tail += 10 + len(chheader) + datasize #+1 
 		return self
 	def __enter__(self)                                : return self
 	def __len__(self) :
@@ -529,55 +530,43 @@ class data_file:
 				self.logger.error("----------------------------------------------------")
 				raise RuntimeError("Too many chunks to delete in {}, use one chunk at the time or slice notation".format(name))
 		if self.autodefragmentation: self.defragmentation()
-	#--- TODO ---#
-	def defragmentation(self): #pass
-	# it should go over all names and check gaps in data positions
-	#  after deletion. If there are gaps, it should move data and reset 
-	#  file size.
-		def findrec(start, mm,reclist):
-			
-			chheadersize, = struct.unpack(">H",mm[start+8:start+10])
-			p = start+10
-			sz,ch,ty,name = eval(mm[p:p+chheadersize])
-			st = start+10+chheadersize
-			ck = [ x for x,y,z in reclist ]
-			if st in ck:
-				idx = [ x for x,y,z in reclist ].index(st)
-				areclist.append( (start,reclist[idx][0],reclist[idx][1],reclist[idx][2]) )
-			
-		reclist  = [ (st,st+sz,nm) for nm in self for fl,st,sz,tp in self.datamap[nm] ]
-		areclist = []
+	def defragmentation(self): 
+		"""
+		it goes over all names and check to find gaps in data positions
+		after deletion. If there are gaps, it should move data and reset 
+		file size.
+		"""
+
+		reclist  = [ st for nm in self for fl,st,sz,tp in self.datamap[nm] ]
+		reclist.sort()
+		
 		with open(self.filename,"rw+b") as fd:
 			mm = mmap.mmap(fd.fileno(), 0)
 			l = len(mm)
-			start = 0
-			while mm[start:start+8] !='#STKDATA': start += 1
-			findrec(start,mm,reclist)
-			for f,t,m in reclist:
-				start=t+1
-				if mm[start:start+8] !='#STKDATA':
-					print "couldn't find",start
-					start=t+2
-					if mm[start:start+8] =='#STKDATA':
-						print "found at", start 
-						findrec(start,mm,reclist)
+			p,r,c = 0,0,0
+			while p < l:
+				while mm[p:p+8] !='#STKDATA' and p < l: p += 1
+				if p >= l: continue
+				if p != r:
+					mm[r:-p+r] = mm[p:]
+					c += p-r
+					p = r
+				chheadersize, = struct.unpack(">H",mm[p+8:p+10])
+				sz,ch,ty,name = eval(mm[p+10:p+10+chheadersize])
+				df = p+10+chheadersize
+				if df+c in reclist:
+					if p != r:
+						mm[r:-p+r] = mm[p:]
+						c += p-r
+						p = r
+					r = p = p+10+chheadersize+sz
+					continue
 				else:
-					findrec(start,mm,reclist)
-			areclist.sort()
-			reclist,shift = [], 0
-			for (s1,d1,z1,n1),(s2,d2,z2,n2) in zip(areclist[:-1],areclist[1:]):
-				if s2 != z1+1:
-					reclist.append((z1+1-shift,s2-shift))
-					shift += s2 - z1 -1
-			for s,d in reclist:
-				#print mm[d:d+8]
-				#print l, l-d+s, d, s, len(mm[s:l-d+s]), len(mm[d:])
-				mm[s:l-d+s] = mm[d:]
+					p = df+sz					
 		self.datamap = {}	
 		self.rescan_file()
 		
-		
-			
+	#--- TODO ---#		
 	def __call__(self,name,*key):
 		"""
 		Possible syntaxes:
@@ -725,7 +714,7 @@ class data_file:
 
 
 if __name__ == "__main__":
-	#logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=logging.DEEPDEBUG)
+	logging.basicConfig(format='%(asctime)s:%(name)-33s%(lineno)-6d%(levelname)-8s:%(message)s', level=logging.DEEPDEBUG)
 	
 	if len(sys.argv) == 3:
 		with data(sys.argv[1]) as sd1,data(sys.argv[2]) as sd2:
@@ -791,8 +780,8 @@ if __name__ == "__main__":
 		print "#DB>> st"
 		with data(sys.argv[1],autocorrection=True) as sd:
 			print "#DB>> in"
-			sd.set("/np/array",np.random.rand(50) )
-			sd.set("/x/np/array",np.random.rand(70) )
+			sd["/np/array"]=np.random.rand(50) 
+			sd["/x/np/array"]=np.random.rand(70)
 			print "#DB>> TREE:"
 			for n in sd.datamap	:
 				for i,p in enumerate(sd.datamap[n]):
@@ -803,7 +792,8 @@ if __name__ == "__main__":
 		print "#DB>> out"
 		#exit(0)
 		with data(sys.argv[1],compress=False) as sd:
-			sd.set("/prime","number").set("/simple","words")
+			sd["/prime"]="number"
+			sd["/simple"]="words"
 
 		print "data[\"/prime\"]       =",data(sys.argv[1])["/prime"]
 		print "data[\"/simple\"]      =",data(sys.argv[1])["/simple"]
@@ -811,7 +801,7 @@ if __name__ == "__main__":
 		print "data[\"/simple\",None] =",data(sys.argv[1])["/simple",None]
 		
 		with data(sys.argv[1]) as sd:
-			sd.set("/prime",(1,2,3,5))
+			sd["/prime"]=(1,2,3,5)
 
 
 		print "print      data[\"/np/array\"]      =",     data(sys.argv[1])["/np/array"]
