@@ -3,23 +3,36 @@ import sys, os, optparse, platform, time, re, commands, logging
 from simtoolkit import data
 
 option_parser = optparse.OptionParser(usage="%prog command STKData [STKData [STKData [...]]] [command parameter(s)]\n"+\
-"STKData - a data source:\n"+\
-"  File or URL\n\n"+\
-"Commands:\n"+\
-"  ls STKData  [record [chunk_index]]  - lists out all records or record size or data in STKData\n"+\
-"                                    EXAMPLES:\n"+\
-"                                     ls x.stkdata                   - shows all name in the file\n"+\
-"                                     ls x.stkdata /rec/n12          - shows number of chunkes in record /rec/n12\n"+\
-"                                     ls x.stkdata /rec/n12 7        - shows data in chunk 7 of record /rec/n12\n"+\
-"                                     ls x.stkdata /rec/n12 (2,14,3) - shows data in chunks 2,5,8, and 12 of record /rec/n12\n"+\
-"  *cp STKData  [record [chunk_index]]   STKData  \n"+\
-"                                      - copy records from one data source to an other one\n"
-"  -------------------------------------------------------------------------------------------------------------------------\n"+\
-"  rm STKData  record [chunk_index]    - remove a whole records or only a specific chunk of data in STKData\n"
-"  *defrag STKData                      - defragmentation STKData\n"
-""
+"""
+STKData - a data source:\n"+\
+  File or URL\n
+Commands:
+  ls STKData  [record [chunk_index]]  - lists out all records or record size or data in STKData
+                                    EXAMPLES:
+                                     ls x.stkdata                   - shows all name in the file
+                                     ls x.stkdata /rec/n12          - shows number of chunkes in record /rec/n12
+                                     ls x.stkdata /rec/n12 7        - shows data in chunk 7 of record /rec/n12
+                                     ls x.stkdata /rec/n12 (2,14,3) - shows data in chunks 2,5,8, and 12 of record /rec/n12
+  TODO> cp STKData  [record [chunk_index]]   STKData  [record [chunk_index]]
+  TODO>                                    - copy records from one data source to an other one
+  TODO> ln STKData  [record [chunk_index]]   STKData  [record [chunk_index]]
+  TODO>                                    - create a link of the data to an aggregating file
+  TODO> cat STKData [STKData [STKData [...]]] -o STKData
+  TODO>                                    - concatenate all data in one -o data storage
+  TODO> mv  STKData [STKData [STKData [...]]] -o STKData
+  TODO>                                    - move all data in one -o storage, if STKData are files, they will be removed
+  -------------------------------------------------------------------------------------------------------------------------
+  rm STKData  record [chunk_index]    - remove a whole records or only a specific chunk of data in STKData
+  defrag STKData                      - defragmentation of STKData
+  -------------------------------------------------------------------------------------------------------------------------
+  TODO>db get STKData record [chunk_index] - get all record or only one chunk data
+  TODO>db set STKData record [chunk_index] [new_record_position_size_or_type]
+  TODO>                                    - set all record or only one chunk data
+"""
 )
 ##>>Other options here
+option_parser.add_option("-o", "--output",                                   dest="output",  default=None,\
+				help="The output for concatenate and move commands") 
 option_parser.add_option(      "--log-level",                                dest="log_level",  default="DEBUG",\
 				help="Level of logging may be CRITICAL, ERROR, WARNING, INFO, or DEBUG (default DEBUG)") 
 option_parser.add_option(      "--log-file",                                 dest="log_file",  default=None,\
@@ -40,10 +53,10 @@ else:
 
 CMD = args[0]
 PRM = {}
-if options.autocorrect:
-	PRM["autocorrection"]=True
-if options.autodefrag:
-	PRM["autodefragmentation"] = True
+
+PRM["autocorrection"]      = options.autocorrect
+PRM["autodefragmentation"] = options.autodefrag
+
 if CMD == "ls":
 	if   len(args) == 2:
 		with data(args[1],**PRM) as d:
@@ -118,3 +131,45 @@ elif CMD == "rm":
 		   "use {} -h for more help\n\n".format(sys.argv[0]))
 		exit(1)
 	
+elif CMD == "defrag":
+	if   len(args) == 2:
+		with data(args[1],**PRM) as d:
+			d.defragmentation()
+	else:
+		sys.stderr.write("\n-----------------------\n"+\
+		   "Incorrect number of parameters for command 'defrag' :\n"+\
+		   "use {} -h for more help\n\n".format(sys.argv[0]))
+		exit(1)
+elif CMD == "db":
+	#debug mode
+	CMD=args[1]
+	args = args[2:]
+	if CMD == "get":
+		if   len(args) == 2:
+			with data(args[0], **PRM) as d:
+				if not args[1] in d.datamap:
+					sys.stderr.write("\n-----------------------\n"+\
+						"Cannot find record %s in %s \n\n"%(args[1],args[0]) )
+					exit(1)
+				for fd,st,sz,tp in d.datamap[args[1]]:
+					print args[1],":",fd,st,sz,tp
+			
+		elif len(args) == 3:
+			ch = int(args[2])
+			with data(args[0], **PRM) as d:
+				if not args[1] in d.datamap:
+					sys.stderr.write("\n-----------------------\n"+\
+						"Cannot find record %s in %s \n\n"%(args[1],args[0]) )
+					exit(1)
+				if len(d.datamap[args[1]]) <= abs(ch) : 
+					sys.stderr.write("\n-----------------------\n"+\
+						"There are only %d chunks in record %s of %s \n\n"%(len(d.datamap[args[1]]), args[1],args[0]) )
+					exit(1)
+				fd,st,sz,tp = d.datamap[args[1]][ch]
+				print "{}[{}]".format(args[1],ch),":",fd,st,sz,tp
+		else:
+			sys.stderr.write("\n-----------------------\n"+\
+		   "Incorrect number of parameters for command 'db get' :\n"+\
+		   "use {} -h for more help\n\n".format(sys.argv[0]))
+			exit(1)
+			
