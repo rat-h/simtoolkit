@@ -16,7 +16,8 @@ record header     - a text representation of the structure
 binary data       - data
 ```
 
-A footer contains a tree of saved names and a binary tree size:
+A footer contains a zipped json serialization of tree and a binary tree size. The tree contains a map of data.
+Each recod has a tree map.
 ```
 tree:
  "/name/name"
