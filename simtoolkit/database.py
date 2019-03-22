@@ -1,8 +1,7 @@
-import sys, zlib, os, platform, logging, hashlib, io
+import sys, zlib, os, platform, logging, hashlib, io, urlparse
 from datetime import datetime
 from random import randint
 import sqlite3
-from urlparse import urlparse
 from simtoolkit.tree import tree
 import numpy  as np
 try:
@@ -19,10 +18,10 @@ class db:
 		self.logger = logging.getLogger("simtoolkit.database.db")
 		self.dburl = dburl
 		self.mode  = "wr"
-		up = urlparse(dburl)
+		up = urlparse.urlparse(dburl)
 		self.dbtype = "file" if up.scheme == "" else up.scheme
 		if up.query != "":
-			upq = dist( urlparse.parse_qsl(up.query) )
+			upq = dict( urlparse.parse_qsl(up.query) )
 			if "mode" in upq: self.mode = upq['mode']
 		self.path     = dburl if up.path == "" else up.path
 		self.username = up.username
@@ -170,59 +169,114 @@ def sqlite(dburl, packvalue, unpackvalue, mode, architecture):
 		logger.error(" Cannot open data base file {} : {}".format(dburl, e))
 		logger.error("----------------------------------------------------")		
 		raise RuntimeError("Cannot open data base file {} : {}".format(dburl, e))
+
 	### Init DB IF NEEDED###
-	if mode != "ro":
-		try:
-			db.execute("CREATE TABLE IF NOT EXISTS stk_attributes (attribute TEXT PRIMARY KEY , value TEXT);")
-			db.commit()
-		except BaseException as e:
-			logger.error("----------------------------------------------------")
-			logger.error(" DATABASE ERROR")
-			logger.error(" Cannot create attributes table in data base file {} : {}".format(dburl, e))
-			logger.error("----------------------------------------------------")		
-			raise RuntimeError("Cannot create attributes table in data base file {} : {}".format(dburl, e))
-		for atr,value in ('version','0.1'),('architecture',architecture),('format','File'):
-			try:
-				db.execute("INSERT OR IGNORE INTO stk_attributes (attribute, value) VALUES(?,?);",(atr,value))
-				db.commit()
-			except BaseException as e:
-				logger.error("----------------------------------------------------")
-				logger.error(" DATABASE ERROR")
-				logger.error(" Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
-				logger.error("----------------------------------------------------")		
-				raise RuntimeError("Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
-		try:
-			db.execute("REPLACE INTO stk_attributes (attribute, value) VALUES('filename',?);",(dburl,))
-			db.commit()
-		except BaseException as e:
-			logger.error("----------------------------------------------------")
-			logger.error(" DATABASE ERROR")
-			logger.error(" Cannot insert filename into data base file {} : {}".format(dburl, e))
-			logger.error("----------------------------------------------------")		
-			raise RuntimeError("Cannot insert filename into data base file {} : {}".format(dburl, e))
+	#if mode != "ro":
+		#try:
+			#db.execute("CREATE TABLE IF NOT EXISTS stk_attributes (attribute TEXT PRIMARY KEY , value TEXT);")
+			#db.commit()
+		#except BaseException as e:
+			#logger.error("----------------------------------------------------")
+			#logger.error(" DATABASE ERROR")
+			#logger.error(" Cannot create attributes table in data base file {} : {}".format(dburl, e))
+			#logger.error("----------------------------------------------------")		
+			#raise RuntimeError("Cannot create attributes table in data base file {} : {}".format(dburl, e))
+		#for atr,value in ('version','0.1'),('architecture',architecture),('format','File'):
+			#try:
+				#db.execute("INSERT OR IGNORE INTO stk_attributes (attribute, value) VALUES(?,?);",(atr,value))
+				#db.commit()
+			#except BaseException as e:
+				#logger.error("----------------------------------------------------")
+				#logger.error(" DATABASE ERROR")
+				#logger.error(" Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
+				#logger.error("----------------------------------------------------")		
+				#raise RuntimeError("Cannot insert attribute {} into data base file {} : {}".format(atr,dburl, e))
+		#try:
+			#db.execute("INSERT OR REPLACE INTO stk_attributes (attribute, value) VALUES('filename',?);",(dburl,))
+			#db.commit()
+		#except BaseException as e:
+			#logger.error("----------------------------------------------------")
+			#logger.error(" DATABASE ERROR")
+			#logger.error(" Cannot insert filename into data base file {} : {}".format(dburl, e))
+			#logger.error("----------------------------------------------------")		
+			#raise RuntimeError("Cannot insert filename into data base file {} : {}".format(dburl, e))
+
 	### Pool version ###
+	#try:
+		#v = db.execute("SELECT value FROM stk_attributes WHERE attribute= \'version\' ;").fetchone()
+	#except BaseException as e:
+		#logger.error("----------------------------------------------------")
+		#logger.error(" DATABASE ERROR")
+		#logger.error(" Cannot fetch version attribute from data base file {} : {}".format(dburl, e))
+		#logger.error("----------------------------------------------------")		
+		#raise RuntimeError("Cannot fetch version attribute from data base file {} : {}".format(dburl, e))
+	#if len(v) > 1:
+		#logger.error("----------------------------------------------------")
+		#logger.error(" DATABASE ERROR")
+		#logger.error(" More than one version value ({}) in database {} ".format(v,dburl))
+		#logger.error("----------------------------------------------------")		
+		#raise RuntimeError("More than one version value ({}) in database {} ".format(v,dburl))
+	#v = v[0]
+	#if v == "0.1":
+		#return sqlite_v_0_1(dburl, packvalue, unpackvalue, mode, architecture)
+	#logger.error("----------------------------------------------------")
+	#logger.error(" DATABASE ERROR")
+	#logger.error(" Unknown format version {} in data base file {} ".format(v,dburl))
+	#logger.error("----------------------------------------------------")		
+	#raise ValueError("Unknown format version {} in data base file {} ".format(v,dburl))
+
+	### Pool application id and version ###
 	try:
-		v = db.execute("SELECT value FROM stk_attributes WHERE attribute= \'version\' ;").fetchone()
+		v = db.execute("PRAGMA application_id;").fetchone()[0]
 	except BaseException as e:
 		logger.error("----------------------------------------------------")
 		logger.error(" DATABASE ERROR")
-		logger.error(" Cannot fetch version attribute from data base file {} : {}".format(dburl, e))
+		logger.error(" Cannot fetch application ID from the file {} : {}".format(dburl, e))
 		logger.error("----------------------------------------------------")		
-		raise RuntimeError("Cannot fetch version attribute from data base file {} : {}".format(dburl, e))
-	if len(v) > 1:
+		raise RuntimeError("Cannot fetch application ID attribute from data base file {} : {}".format(dburl, e))
+	if v != 0x53544844 and v != 0:
 		logger.error("----------------------------------------------------")
 		logger.error(" DATABASE ERROR")
-		logger.error(" More than one version value ({}) in database {} ".format(v,dburl))
+		logger.error(" The file \"{}\" is belong to another application! Application id : {:x}".format(dburl, v))
 		logger.error("----------------------------------------------------")		
-		raise RuntimeError("More than one version value ({}) in database {} ".format(v,dburl))
-	v = v[0]
-	if v == "0.1":
+		raise RuntimeError("File {} is not STKDB : {:x}".format(dburl, v))
+	if v == 0 and mode != "ro" :
+		try:
+			db.execute("PRAGMA application_id = 0x53544844;")
+			db.commit()
+		except BaseException as e:
+			logger.error("----------------------------------------------------")
+			logger.error(" DATABASE ERROR")
+			logger.error(" Cannot set application ID from the file {} : {}".format(dburl, e))
+			logger.error("----------------------------------------------------")		
+			raise RuntimeError("Cannot set application ID from the file {} : {}".format(dburl, e))
+	try:
+		v = db.execute("PRAGMA user_version;").fetchone()[0]
+	except BaseException as e:
+		logger.error("----------------------------------------------------")
+		logger.error(" DATABASE ERROR")
+		logger.error(" Cannot fetch STKDB format version from the file {} : {}".format(dburl, e))
+		logger.error("----------------------------------------------------")		
+		raise RuntimeError("Cannot fetch STKDB format version from the file {} : {}".format(dburl, e))
+	if v == 0 and mode != "ro" :
+		try:
+			db.execute("PRAGMA user_version = 1;")
+			db.commit()
+		except BaseException as e:
+			logger.error("----------------------------------------------------")
+			logger.error(" DATABASE ERROR")
+			logger.error(" Cannot set format version in the file {} : {}".format(dburl, e))
+			logger.error("----------------------------------------------------")		
+			raise RuntimeError("Cannot set format version in the file {} : {}".format(dburl, e))
+	if v == 0 :v = 1
+	if v == 1:
 		return sqlite_v_0_1(dburl, packvalue, unpackvalue, mode, architecture)
 	logger.error("----------------------------------------------------")
 	logger.error(" DATABASE ERROR")
 	logger.error(" Unknown format version {} in data base file {} ".format(v,dburl))
 	logger.error("----------------------------------------------------")		
 	raise ValueError("Unknown format version {} in data base file {} ".format(v,dburl))
+
 
 class sqlite_v_0_1:
 	def __init__(self, dburl, packvalue, unpackvalue, mode, architecture):
@@ -303,9 +357,12 @@ class sqlite_v_0_1:
 					self.logger.error(" Cannot execute initiation sequence  {} : {}".format(cmd, e))
 					self.logger.error("----------------------------------------------------")		
 					raise RuntimeError("Cannot execute initiation sequence  {} : {}".format(cmd, e))
+		else:
+			self.db.execute("PRAGMA query_only = on")
+			self.db.commit()
+			
 	def info(self):
 		info = {}
-		for atribute,value in self.db.execute("SELECT * FROM stk_attributes;"): info[atribute] = value
 		info["py-sqlite"] = sqlite3.version
 		info["sqlite"]    = sqlite3.sqlite_version
 		for i,n,v in self.db.execute("PRAGMA database_list"):
@@ -341,6 +398,13 @@ class sqlite_v_0_1:
 			#raise RuntimeError("There are more than one records with the same time stamp, hash and message")
 		return cur.lastrowid
 	def mkname(self,name):
+		if self.mode == "ro":
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in record")
+			self.logger.error(" Cannot record in read-only data base")
+			self.logger.error("----------------------------------------------------")		
+			raise ValueError("Cannot record in read-only data base")
+		
 		if "*" in name or "?" in name or "[" in name or "]" in name: 
 			self.logger.error("----------------------------------------------------")
 			self.logger.error(" DATABASE ERROR in mkname")
@@ -359,9 +423,9 @@ class sqlite_v_0_1:
 			if len(nameid) > 1:
 				self.logger.error("----------------------------------------------------")
 				self.logger.error(" DATABASE ERROR in mkname")
-				self.logger.error(" name {} is not quintic".format(name))
+				self.logger.error(" name {} is not unique".format(name))
 				self.logger.error("----------------------------------------------------")		
-				raise RuntimeError("name {} is not quintic".format(name))
+				raise RuntimeError("name {} is not unique".format(name))
 			else:
 				return nameid[0]
 		try:
@@ -384,11 +448,17 @@ class sqlite_v_0_1:
 		if len(nameid) > 1:
 			self.logger.error("----------------------------------------------------")
 			self.logger.error(" DATABASE ERROR in mkname")
-			self.logger.error(" name {} is not quintic".format(name))
+			self.logger.error(" name {} is not unique".format(name))
 			self.logger.error("----------------------------------------------------")		
-			raise RuntimeError("name {} is not quintic".format(name))
+			raise RuntimeError("name {} is not unique".format(name))
 		return nameid[0]
 	def recordvalue(self, n, recid, nameid, valtype, value):
+		if self.mode == "ro":
+			self.logger.error("----------------------------------------------------")
+			self.logger.error(" DATABASE ERROR in record")
+			self.logger.error(" Cannot record in read-only data base")
+			self.logger.error("----------------------------------------------------")		
+			raise ValueError("Cannot record in read-only data base")
 		try:
 			v = self.db.execute("SELECT id FROM stkvalues WHERE record=:record AND name=:name;",{'name':nameid, 'record':recid}).fetchone()
 		except BaseException as e :
@@ -493,6 +563,13 @@ class sqlite_v_0_1:
 				elif type(name) is str or type(name) is unicode:
 					for i,n in self.db.execute("SELECT * FROM stknames WHERE name GLOB :name;",{'name':name+"/*"}):
 						namescliner.append(i)
+					for i,n in self.db.execute("SELECT * FROM stknames WHERE name GLOB :name;",{'name':name+"/*"}):
+						namescliner.append(i)
+					pname = name.split("/")
+					if len(pname) > 2:
+						pname = "/".join(pname[:-1])
+						for i,n in self.db.execute("SELECT * FROM stknames WHERE name GLOB :name;",{'name':pname}):
+							namescliner.append(i)
 					nrec = self.db.execute("SELECT * FROM stknames WHERE name GLOB :name;",{'name':name}).fetchall()
 					if nrec is None or len(nrec) == 0:
 						nami = [self.mkname(name)]#yield self.mkname(name)
@@ -506,10 +583,12 @@ class sqlite_v_0_1:
 					self.logger.error(" Couldn't find record or name reci={}, namei={}".format(reci,nami))
 					self.logger.error("----------------------------------------------------")		
 					raise RuntimeError("Couldn't find record or name reci={}, namei={}".format(reci,nami))
-				self.db.executemany("REPLACE INTO stkvalues (id,record,name,type, value) VALUES ((SELECT id FROM stkvalues WHERE record = :rec AND name = :name),:rec,:name,:type,:value);",tuple(vfl))				
+				self.db.executemany("REPLACE INTO stkvalues (id,record,name,type, value) VALUES ((SELECT id FROM stkvalues WHERE record = :rec AND name = :name),:rec,:name,:type,:value);",tuple(vfl))	
 				self.db.commit()
-				for i in namescliner:
-					self.db.execute("DELETE FROM stknames WHERE id=?;",(i,))
+				# Deleting all values in this record which are lower in the name tree
+				#  or parent if it has a value
+				for r,n in [ (r,n) for r in reci for n in namescliner ]:
+					self.db.execute("DELETE FROM stkvalues WHERE record = :rec AND name = :name;",{'name':n,'rec':r})
 				self.db.commit()
 			else:
 				self.logger.error("----------------------------------------------------")
@@ -880,8 +959,6 @@ if __name__ == "__main__":
 		print "USEAGE: python -m simtoolkit/database model-fileformats/example.stkdb"
 		exit(1)
 	testdb = db(sys.argv[1])
-	for row in testdb.db.db.execute("SELECT * FROM stk_attributes;"):
-		print row[0],"=",row[1]
 	#DB>>
 	#for row in testdb.db.db.execute("SELECT * FROM stkview;"):
 		#print row
@@ -906,25 +983,25 @@ if __name__ == "__main__":
 		print 
 
 	print "\n/list  :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","/list"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","/list"):
 		print l
 	print "\n/li    :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","/li"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","/li"):
 		print l
 	print "\n/li*   :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","/li*"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","/li*"):
 		print l
 	print "\n/a/   :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","/a/"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","/a/"):
 		print l
 	print "\n/a    :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","/a"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","/a"):
 		print l
 	print "\n/a*   :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","/a*"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","/a*"):
 		print l
 	print "\n/     :"
-	for l in testdb.pool("ab2d5b661a598a58b5f96b967c42be524fc56318","*"):
+	for l in testdb.pool("3d3a18413de509698bbcbf9efd91c9c2fec56ede","*"):
 		print l
 	print "\nkey* /* :"
 	for l in testdb.pool("d*","/*"):
