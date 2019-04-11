@@ -145,7 +145,7 @@ Here is an example:
 ;              v-------------v  Here is a definition of another iterator
     /SecondIter_` y= range(3) `/{
         /Iterator     = `y`                      ; the second iterator is set by reference
-; We can to calculations with iterators as with normal parameters...
+; We can to do calculations with iterators as with normal parameters...
         /CalculateMul = `i`*`y`                  ; calculates multiple of both iterators
 ; Iterator can be used with links and functions
         /IterFunc     = @/types/func@(`i`+`y`)   ; Function from iterators sum
