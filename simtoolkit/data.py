@@ -87,7 +87,7 @@ class data:
 						self.logger.error("----------------------------------------------------")		
 						raise ValueError("The file {} is read-only. Cannot open it in 'w' mode".format(self.path))
 				self.data = data_file(self.path, mode="w",  **cmd)
-			elif self.mode == "ro":
+			elif self.mode  == "ro":
 				self.data = data_file(self.path, mode="ro", **cmd)
 			else:
 				self.logger.error("----------------------------------------------------")
@@ -146,15 +146,9 @@ class data_file:
 		self.npcompress = npcompress
 		self.maxbufsize = maxbuffersize
 		if self.maxbufsize < 1:
-			#self.maxbufsize = psutil.virtual_memory().total/4
-			#>>
 			self.maxbufsize = psutil.virtual_memory().available/4
-			#<<
-			#self.logger.deepdebug(" < Receiver: maxbuffersize={}".format(self.maxbufsize))
 			self.logger.deepdebug(" - Both    : maxbuffersize={}".format(self.maxbufsize))
 		if self.parallel:
-			#self.queue   = Queue(maxsize = self.maxbufsize/10)
-			#self.queue   = Queue(self.maxbufsize/10)
 			self.queue   = Queue(21)
 			self.dthread = Process(target=self.savebuffer) 
 			self.dthread.start()
@@ -188,51 +182,56 @@ class data_file:
 	def readfooter(self):
 		if self.filename is None:
 			return self.initfooter()
+		
 		try:
 			self.fsize = os.path.getsize(self.filename)
 		except:
-			self.initfooter()
-		
-		if self.fsize > 8:
-			try:
-				with open(self.filename,"rb") as fd:
-					fd.seek(-8,2)                            #everything from the tail
-					self.logger.deepdebug(" > rdft: shits to -8,2")
-					idx =  struct.unpack(">Q",fd.read(8))[0] #Tree size
-					self.logger.deepdebug(" > rdft: idx(treesize)={}".format(idx))
-					fd.seek(-idx-8,2)
-					self.logger.deepdebug(" > rdft: shits to -{}-8,2={}".format(idx,(-idx-8,2)))
-					#importing back to the tree
-					self.datamap = tree().imp( zlib.decompress(fd.read(idx)) ) 
-					self.logger.deepdebug(" > rdft: the tree={}".format(self.datamap))
-			except BaseException as e:
-				self.logger.warning("----------------------------------------------------")
-				self.logger.warning(" DATA ERROR in readfooter")
-				self.logger.warning(" Cannot open file \'{}\': {}".format(self.filename,e))
-				self.logger.warning("----------------------------------------------------")		
-				if not self.autocorrection:
-					raise RuntimeError("Cannot open file \'{}\': {}".format(self.filename,e))
-				else:
-					self.rescan_file()
-				#self.initfooter()
-		else:
-			self.initfooter()
+			return self.initfooter()
+					
+		if self.fsize < 9:
+			return self.initfooter()
+
+		try:
+			with open(self.filename,"rb") as fd:
+				fd.seek(-8,2)                            #everything from the tail
+				self.logger.deepdebug(" > rdft: shits to -8,2")
+				idx =  struct.unpack(">Q",fd.read(8))[0] #Tree size
+				self.logger.deepdebug(" > rdft: idx(treesize)={}".format(idx))
+				fd.seek(-idx-8,2)
+				self.logger.deepdebug(" > rdft: shits to -{}-8,2={}".format(idx,(-idx-8,2)))
+				#importing back to the tree
+				self.datamap = tree().imp( zlib.decompress(fd.read(idx)) ) 
+				self.logger.deepdebug(" > rdft: the tree={}".format(self.datamap))
+		except BaseException as e:
+			self.logger.warning("----------------------------------------------------")
+			self.logger.warning(" DATA ERROR in readfooter")
+			self.logger.warning(" Cannot open file \'{}\': {}".format(self.filename,e))
+			self.logger.warning("----------------------------------------------------")		
+			if not self.autocorrection:
+				raise RuntimeError("Cannot open file \'{}\': {}".format(self.filename,e))
+			else:
+				self.rescan_file()
+			#self.initfooter()
+			
 		self.mtime = os.stat(self.filename).st_mtime
 		self.tail  = 0
 		for n in self.datamap:
 			for fl,st,sz,tp in self.datamap[n]:
 				if not fl is None: continue
-				if self.tail <= st+sz: self.tail = st+sz #+1
+				if self.tail <= st+sz: self.tail = st+sz
 		self.logger.deepdebug(" > rdtf: self.tail={}".format(self.tail))
 
 	def rescan_file(self):
 		self.datamap = tree()
 		self.tail    = 0
+		self.fsize = os.path.getsize(self.filename)
 		with open(self.filename,"rw+b") as fd:
 			mm = mmap.mmap(fd.fileno(), 0)
 			start = mm.find('#STKDATA')
 			while start >= 0:
+				if start+10 >= self.fsize: break
 				chheadersize, = struct.unpack(">H",mm[start+8:start+10])
+				if start+10+chheadersize >= self.fsize: break
 				sz,ch,ty,name = eval(mm[start+10:start+10+chheadersize])
 				st = start+10+chheadersize
 				Xch = 0 if not name in self.datamap else len(self.datamap[name])
@@ -242,7 +241,9 @@ class data_file:
 					self.logger.error(" Chunk number {} of variable {} is not correct - should be".format(ch,name,Xch))
 					self.logger.error("----------------------------------------------------")
 				#checking chunk size
-				self.tail = start+10+chheadersize+sz #+1
+				if start+10+chheadersize+sz >= self.fsize: break
+				self.tail = start+10+chheadersize+sz
+				if self.tail+8 >= self.fsize: break
 				if mm[self.tail:self.tail+8] == '#STKDATA':
 					start = self.tail
 				else:
