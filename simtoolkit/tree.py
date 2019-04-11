@@ -115,7 +115,7 @@ class tree(OrderedDict):
 		return json.dumps(self)#[ (name,self[name]) for name in self ]
 	def imp(self, data):
 		"""
-		import from a tree structure and values from a json string
+		import a tree structure and values from a json string
 		"""
 		zjson = json.loads(data,object_pairs_hook=OrderedDict)
 		for name in zjson:
