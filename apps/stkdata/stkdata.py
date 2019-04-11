@@ -4,10 +4,10 @@ from simtoolkit import data
 
 option_parser = optparse.OptionParser(usage="%prog command STKData [STKData [STKData [...]]] [command parameter(s)]\n"+\
 """
-STKData - a data source:\n"+\
+STKData - a data source:
   File or URL\n
 Commands:
-  ls STKData  [record [chunk_index]]  - lists out all records or record size or data in STKData
+  ls STKData  [record [chunk_index]]       - lists out all records or record size or data in STKData
                                     EXAMPLES:
                                      ls x.stkdata                   - shows all name in the file
                                      ls x.stkdata /rec/n12          - shows number of chunkes in record /rec/n12
@@ -22,10 +22,10 @@ Commands:
   TODO> mv  STKData [STKData [STKData [...]]] -o STKData
   TODO>                                    - move all data in one -o storage, if STKData are files, they will be removed
   -------------------------------------------------------------------------------------------------------------------------
-  rm STKData  record [chunk_index]    - remove a whole records or only a specific chunk of data in STKData
-  defrag STKData                      - defragmentation of STKData
+  rm STKData  record [chunk_index]         - remove a whole records or only a specific chunk of data in STKData
+  defrag STKData                           - defragmentation of STKData
   -------------------------------------------------------------------------------------------------------------------------
-  TODO>db get STKData record [chunk_index] - get all record or only one chunk data
+  db get STKData [record [chunk_index]]    - get all or record or only one chunk data
   TODO>db set STKData record [chunk_index] [new_record_position_size_or_type]
   TODO>                                    - set all record or only one chunk data
 """
@@ -145,7 +145,12 @@ elif CMD == "db":
 	CMD=args[1]
 	args = args[2:]
 	if CMD == "get":
-		if   len(args) == 2:
+		if   len(args) == 1:
+			with data(args[0], **PRM) as d:
+				for name in  d:
+					for fd,st,sz,tp in d.datamap[name]:
+						print name,":",fd,st,sz,tp
+		elif len(args) == 2:
 			with data(args[0], **PRM) as d:
 				if not args[1] in d.datamap:
 					sys.stderr.write("\n-----------------------\n"+\

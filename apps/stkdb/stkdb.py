@@ -5,55 +5,58 @@ import sys, os, optparse, platform, time, re, commands, logging
 from simtoolkit import db, tree
 from datetime import datetime
 from random import randint
+import numpy as np
 
 
-option_parser = optparse.OptionParser(usage="%prog STKDB command [command parameter(s)]\n\nSTKDB - Database:\n  File or URL\n\nCommands:\n"+\
-"  ls           - list all records or parameters with filter name if record is given\n"+\
-"                 EXAMPLES:\n"+\
-"                  ls                                                 - shows all records in database (hash, time-stamp, message)\n" +\
-"                  ls  7945*                                          - shows all records which hash start on 7945 \n"+\
-"                  ls  79455f9cc5cfda64bf77f59bb60113a4492ab3f8       - shows record(s) with hash 79455f9cc5cfda64bf.....\n"+\
-"                  ls  79455f9cc5cfda64bf77f59bb60113a4492ab3f8 -t    - as before but now it will print out full tree of parameters\n"+\
-"                                                                        for each record without \n"+\
-"                  ls  7945* /                                        - prints out all parameters in recordings starts with 7945\n"+\
-"                  ls  7945* /Connections/                            - prints out /Connections parameters in recordings starts with 7945\n"+\
-"                  ls  7945* /Connections/*/gmax-*                    - prints out /Connections/*/gmax-* parameters in recordings starts with 7945\n"+\
-"                  ls  -n                                             - shows list of names\n"+\
-"  ------------------------------\n"+\
-"  create HASH MESSAGE \n"+\
-"               - creates new empty set of parameters with the HASHSUM and message\n"+\
-"                 EXAMPLE:\n"+\
-"                  create bd5f80e8be44c0965bab82698b24a6b6e4283816 \'blach-blach-blach\' \n"+\
-"  set KEY KEY VALUE \n"+\
-"               - sets in simulation(s) selected by the first key, parameter(s) selected by the second key into value\n"+\
-"  get KEY [KEY]- get a value of parameter in parameter defined by second key in record defined by the first key \n"+\
-"  rm  KEY [KEY]- remove record or parameter(s) from record\n"+\
-"                 EXAMPLE:\n"+\
-"                  rm 79455f9cc5cfda64bf77f59bb60113a4492ab3f8        - remove hole record 79455f9cc5cfda64bf.....\n"+\
-"                  rm 79455*                                          - remove all records start with 79455\n"+\
-"                  rm 79455*  /Connections/EE/                        - remove all /Connections/EE/ parameters in records start with 79455\n"+\
-"                  rm 79455*  /Connections/*/gmax-*                   - remove all /Connections/*/gmax-* parameters in records start with 79455\n"+\
-"  ------------------------------\n"+\
-"  message KEY [new message] \n"+\
-"               - edit message in record marked by KEY\n"+\
-"                 if new message isn't provided, reads /STKDB/editor or /GENERAL/editor in configuration file\n"+\
-"  ------------------------------\n"+\
-"  tag  COMMAND - operations with tag\n"+\
-"       ls               - shows all tags\n"+\
-"       ls TAG [-t][-l]  - shows parameters in simulation with TAG\n"+\
-"                         EXAMPLE:\n"+\
-"                          tag ls  v.01.*\n"+\
-"       set TAG KEY      - sets tag TAG for record(s) selected by KEY\n"+\
-"                         EXAMPLE:\n"+\
-"                           tag set v.01.fast 79455f9cc5cfda64bf77f59bb60113a4492ab3f8 \n" +\
-"                           tag set v.01.slow 2017-11-21/11:30:15.47 \n" +\
-"                           tag set v.01.ALL  2017-11-21/*          - will mark all recordings made this day by v.01.ALL\n" +\
-"       rm TAG           - remove tag\n"+\
-"  ------------------------------\n"+\
-"  info        - print out information about data base\n"+\
-"  db recs|names|values [fliter [column]]\n"+\
-"              - debug information. see simtoolkit.database for more information\n"+\
-"\n===================================")
+option_parser = optparse.OptionParser(usage="%prog STKDB command [command parameter(s)]\n\nSTKDB - Database:\n  File or URL\n\n"+\
+"""
+Commands:
+  ls           - list all records or parameters with filter name if record is given
+                 EXAMPLES:
+                  ls                                                 - shows all records in database (hash, time-stamp, message)
+                  ls  7945*                                          - shows all records which hash start on 7945 
+                  ls  79455f9cc5cfda64bf77f59bb60113a4492ab3f8       - shows record(s) with hash 79455f9cc5cfda64bf.....
+                  ls  79455f9cc5cfda64bf77f59bb60113a4492ab3f8 -t    - as before but now it will print out full tree of parameters
+                                                                        for each record without 
+                  ls  7945* /                                        - prints out all parameters in recordings starts with 7945
+                  ls  7945* /Connections/                            - prints out /Connections parameters in recordings starts with 7945
+                  ls  7945* /Connections/*/gmax-*                    - prints out /Connections/*/gmax-* parameters in recordings starts with 7945
+                  ls  -n                                             - shows list of names
+  ------------------------------
+  create HASH MESSAGE 
+               - creates new empty set of parameters with the HASHSUM and message
+                 EXAMPLE:
+                  create bd5f80e8be44c0965bab82698b24a6b6e4283816 \'blach-blach-blach\' 
+  set KEY KEY VALUE 
+               - sets in simulation(s) selected by the first key, parameter(s) selected by the second key into value
+  get KEY [KEY]- get a value of parameter in parameter defined by second key in record defined by the first key 
+  rm  KEY [KEY]- remove record or parameter(s) from record
+                 EXAMPLE:
+                  rm 79455f9cc5cfda64bf77f59bb60113a4492ab3f8        - remove hole record 79455f9cc5cfda64bf.....
+                  rm 79455*                                          - remove all records start with 79455
+                  rm 79455*  /Connections/EE/                        - remove all /Connections/EE/ parameters in records start with 79455
+                  rm 79455*  /Connections/*/gmax-*                   - remove all /Connections/*/gmax-* parameters in records start with 79455
+  ------------------------------
+  message KEY [new message] 
+               - edit message in record marked by KEY
+                 if new message isn't provided, reads /STKDB/editor or /GENERAL/editor in configuration file
+  ------------------------------
+  tag  COMMAND - operations with tag
+       ls               - shows all tags
+       ls TAG [-t][-l]  - shows parameters in simulation with TAG
+                         EXAMPLE:
+                          tag ls  v.01.*
+       set TAG KEY      - sets tag TAG for record(s) selected by KEY
+                         EXAMPLE:
+                           tag set v.01.fast 79455f9cc5cfda64bf77f59bb60113a4492ab3f8 \n" +\
+                           tag set v.01.slow 2017-11-21/11:30:15.47 \n" +\
+                           tag set v.01.ALL  2017-11-21/*          - will mark all recordings made this day by v.01.ALL
+       rm TAG           - remove tag
+  ------------------------------
+  info        - print out information about data base
+  db recs|names|values [fliter [column]]
+              - debug information. see simtoolkit.database for more information
+===================================""")
 option_parser.add_option("-n", "--names",            action="store_true",    dest="names",      default=False,\
 				help="Show list of names for all possible parameters in data base") 
 option_parser.add_option("-t", "--tree",             action="store_true",    dest="tree",       default=False,\
@@ -94,7 +97,7 @@ def printhead(h,t,m,g=None,idx=None):
 	print "TIME    :",t.replace(" ","/")
 	print "MESSAGE :",m.strip(" \n\t\a").replace("\n","\n               ")		
 	if not g is None:
-		print "TAG        :",g
+		print "TAG     :",g
 def printtree(h,t,m,Atree,g=None,idx=None):
 	print "\n================================================================="
 	printhead(h,t,m,g=g,idx=idx)
@@ -144,7 +147,7 @@ if CMD == "ls":
 			if options.tree: 
 				Atree[n] = v
 			else:
-				if len(v) > 100  and not options.printfull:
+				if (type(v) is list or type(v) is tuple or isinstance(v,np.ndarray) ) and len(v) > 100  and not options.printfull:
 					print "  ",n,v[:35]," ... ",v[-35:]
 				else:
 					print "  ",n,"{}".format(v).replace("\n"," ")
