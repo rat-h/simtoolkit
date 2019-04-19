@@ -127,22 +127,22 @@ class tree(OrderedDict):
 			for nidx,name in enumerate( sorted( self[None] ) ):
 				if isinstance(self[name],tree):
 					lastflag = nidx==len(self)-1
-					root.append( ("%s%sv: %s "%(space, "`-" if lastflag else "|-", name[1:]), None) )
+					root.append( ("%s%sv: %s "%(space, "`-" if lastflag else "|-", name[1:]), None,space) )
 					#root += self[name].printnames(space=space+"  " if lastflag else space+"| ",parent=parent+self.hsymbol+name, sort=sort)
 					root += self[name].printnames(space=space+"  " if lastflag else space+"| ",parent=parent+name, sort=sort)
 				else:
 					#root.append( ("%s%s > %s "%(space,"`-" if nidx==len(self)-1 else "|-", name[1:]), parent+self.hsymbol+name) ) 
-					root.append( ("%s%s > %s "%(space,"`-" if nidx==len(self)-1 else "|-", name[1:]), parent+name) ) 
+					root.append( ("%s%s > %s "%(space,"`-" if nidx==len(self)-1 else "|-", name[1:]), parent+name,space) ) 
 		else:
 			for nidx,name in enumerate( self[None] ):
 				if isinstance(self[name],tree):
 					lastflag = nidx==len(self)-1
-					root.append( ("%s%sv: %s "%(space, "`-" if lastflag else "|-", name[1:]), None) )
+					root.append( ("%s%sv: %s "%(space, "`-" if lastflag else "|-", name[1:]), None,space) )
 					#root += self[name].printnames(space=space+"  " if lastflag else space+"| ",parent=parent+self.hsymbol+name)
 					root += self[name].printnames(space=space+"  " if lastflag else space+"| ",parent=parent+name)
 				else:
 					#root.append( ("%s%s > %s "%(space,"`-" if nidx==len(self)-1 else "|-", name[1:]), parent+self.hsymbol+name) ) 
-					root.append( ("%s%s > %s "%(space,"`-" if nidx==len(self)-1 else "|-", name[1:]), parent+name) ) 
+					root.append( ("%s%s > %s "%(space,"`-" if nidx==len(self)-1 else "|-", name[1:]), parent+name,space) ) 
 		return root
 
 			

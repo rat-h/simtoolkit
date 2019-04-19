@@ -79,7 +79,7 @@ class methods:
 		@opt   groupend    - a symbol at the end       of group subtree 
 		@opt   isymbol     - a symbol at the beginning and end  of iterator in both a name and a value 
 		@opt   mmopen      - a (set of) symbol(s) at the beginning of main message, i.e. model title 
-		@opt   mmend       - a (set of) symbol(s) at the end       of main message, i.e. model title 
+		@opt   mmend       - a (set of) symbol(s) at the end       of main message, i.e. model title 		
 		@opt   pure        - if True parameters with wrong format will raise an exception .
 
 		"""
@@ -146,24 +146,40 @@ class methods:
 			self.logger.error(" Arguments should be a string or list/tuple of strings or file objects. {} is given".format(type(argvs)))
 			self.logger.error("----------------------------------------------------")		
 			if self.pure : raise TypeError("Arguments should be a string or list/tuple of strings or file objects. {} is given".format(type(argvs)))
-		#for arg in argvs:
+		for arg in argvs:
+			parts = self.resolve_expression(arg)
+			if len(parts) != 2 :
+				self.logger.error("----------------------------------------------------")
+				self.logger.error(" METHODS ERROR in __init__)")
+				self.logger.error(" Cannot resolve argument {}".format(arg))
+				self.logger.error("----------------------------------------------------")		
+				if self.pure : raise TypeError("Cannot resolve argument {}".format(arg))
+				continue
+			arg,value = parts
+			if arg in self.methods_txt:
+				self.methods_txt[arg] = (value, self.methods_txt[arg][1]  )
+			else :
+				self.methods_txt[arg] = (value,"--Command line argument--")
 			
 		
 	# Functions to read parameters from  default configuration, stkdb and so on	
+
+	def resolve_expression(self, expr, sep = None):
+		if sep is None: sep = self.vseparator			
+		return [ x.strip(" \n\t\r") for x in expr.strip(" \n\t\r").split(sep,1) ]
+
 	def __confreader__(self, confile):
 		"""
 		reads configuration file(s) and creates text tree.
 		it resolves groups and prepare iterators for farther use
 		"""
-		def resolve_expression(expr, sep = self.vseparator):			
-			return [ x.strip(" \n\t\r") for x in expr.strip(" \n\t\r").split(sep,1) ]
 		def resolve_iterators(name, sep=self.isymbol):
 			copir = name.strip(" \n\t\r").split(sep)
 			result = ""
 			for prefix,var in map(None, copir[::2], copir[1::2]):
 				if prefix is not None: result += prefix
 				if var is None: continue
-				parts = resolve_expression(var)
+				parts = self.resolve_expression(var)
 				if len(parts) > 1:
 					arg,value = parts
 					arg,value = arg,value
@@ -248,7 +264,7 @@ class methods:
 					self.logger.warning(" Found group beginning or end before a message at line {} of {}".format(nl+1, confile.name))
 					self.logger.warning(" NOTE: it you are using dictionaries please convert them into a subtree(s) to avoid this message again.")
 					self.logger.warning("----------------------------------------------------")
-				parts = resolve_expression( resolve_iterators(command) )+[message]
+				parts = self.resolve_expression( resolve_iterators(command) )+[message]
 				parts = "/".join([""]+groups+[""])+parts[0].strip(" \n\t\r/"), parts[1].strip(" \n\t\r"),parts[2].strip(" \n\t\r")
 				self.methods_txt[parts[0]]=parts[1],parts[2]
 				command, message, continue_on = "", "", False
@@ -652,7 +668,22 @@ class methods:
 				self.dependences = []
 				self.logger.debug( " > % 76s : OK"%(name))
 		return False
-
+	def printhelp(self):
+		ret = self.mainmessage + "\n**** PARAMETERS ****\n\n"
+		for p,k,s in self.methods_txt.printnames():
+			if k is None:
+				ret += "{}\n".format(p)
+			else:
+				refadd = "{} = {}".format(p,self.methods_txt[k][0])
+				if len(refadd) < 33: refadd += " "*(33-len(refadd)) + " ; {} \n".format(self.methods_txt[k][1])
+				else :
+					c = p[len(s)]
+					if c == "|": c = s+c
+					else       : c = s
+					refadd += "\n"+c+" "*(33-len(c)) + " ; {} \n".format(self.methods_txt[k][1])
+				ret += refadd
+		ret += "\n"
+		return ret
 	
 
 
